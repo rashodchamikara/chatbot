@@ -24,21 +24,21 @@ class ValidateEmbedToken
             return response()->json(['error' => 'Invalid token'], 403);
         }
 
-        if ($website->verify_domain) {
+        // if ($website->verify_domain) {
 
-            $origin = $request->header('Origin');
-            $host = parse_url(
-                $origin,
-                PHP_URL_HOST
-            );
-            if ($host !== $website->domain) {
-                 return response()->json([
-            'error' => 'Domain mismatch'
-                ], 403);
+        //     $origin = $request->header('Origin');
+        //     $host = parse_url(
+        //         $origin,
+        //         PHP_URL_HOST
+        //     );
+        //     if ($host !== $website->domain) {
+        //          return response()->json([
+        //     'error' => 'Domain mismatch'
+        //         ], 403);
 
-            }
+        //     }
 
-        }
+        // }
 
         $request->merge([
             'website' => $website

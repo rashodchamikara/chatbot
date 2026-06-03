@@ -13,16 +13,13 @@ class ChatController extends Controller
 {
     public function message(Request $request, SalesBrainService $brain)
     {
-        // 1. Validate input
         $request->validate([
             'message' => 'required|string',
             'visitor_id' => 'required|string',
         ]);
 
-        // 2. Get website from middleware
         $website = $request->website;
 
-        // 3. Find or create conversation
         $conversation = Conversation::firstOrCreate(
             [
                 'website_id' => $website->id,
@@ -33,15 +30,13 @@ class ChatController extends Controller
             ]
         );
 
-        // 4. Save visitor message
         Message::create([
             'conversation_id' => $conversation->id,
             'sender' => 'visitor',
             'message' => $request->message
         ]);
 
-        // 5. Fetch recent messages for context
-        $history = Message::where('conversation_id', $conversation->id)
+       $history = Message::where('conversation_id', $conversation->id)
             ->latest()
             ->take(10)
             ->get()
@@ -55,15 +50,10 @@ class ChatController extends Controller
             ->values()
             ->toArray();
 
-        // 6. Call OpenAI
-        $response = OpenAI::responses()->create([
-            'model' => 'gpt-4.1-mini',
-            'input' => array_merge([
-                [
-                    'role' => 'system',
-                    'content' => 'You are a helpful AI sales assistant.'
-                ]
-            ], $history),
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'sender' => 'visitor',
+            'message' => $request->message
         ]);
 
         $aiText = $brain->analyze(
@@ -72,14 +62,6 @@ class ChatController extends Controller
             $history
         );
 
-        // 7. Save AI response
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'sender' => 'ai',
-            'message' => $aiText
-        ]);
-
-        // 8. Return response
         return response()->json([
             'reply' => $aiText,
             'conversation_id' => $conversation->id

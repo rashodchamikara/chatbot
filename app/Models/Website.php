@@ -24,5 +24,13 @@ class Website extends Model
         return $this->belongsTo(Tenant::class);
     }
 
-    
+    public function knowledgePages()
+    {
+        return $this->hasMany(KnowledgePage::class);
+    }
+
+    public function knowledgeChunks()
+    {
+        return $this->hasMany(KnowledgeChunk::class);
+    }
 }
