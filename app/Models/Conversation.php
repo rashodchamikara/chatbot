@@ -11,11 +11,23 @@ class Conversation extends Model
     protected $fillable = [
         'website_id',
         'visitor_id',
-        'status'
+        'status',
+        'lead_id',
+        'lead_stage',
     ];
+
+     public function website()
+    {
+        return $this->belongsTo(Website::class);
+    }
 
     public function messages()
     {
         return $this->hasMany(Message::class);
     }
+     public function lead()
+    {
+        return $this->belongsTo(Lead::class);
+    }
+     
 }

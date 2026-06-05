@@ -3,19 +3,21 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Website;
 use App\Models\Conversation;
 use App\Models\Message;
-use OpenAI\Laravel\Facades\OpenAI;
 use App\Services\SalesBrainService;
+use App\Services\LeadCaptureService;
 
 class ChatController extends Controller
 {
-    public function message(Request $request, SalesBrainService $brain)
-    {
+    public function message(
+        Request $request,
+        SalesBrainService $brain,
+        LeadCaptureService $leadCaptureService
+    ) {
         $request->validate([
-            'message' => 'required|string',
-            'visitor_id' => 'required|string',
+            'message' => 'required|string|max:5000',
+            'visitor_id' => 'required|string|max:255',
         ]);
 
         $website = $request->website;
@@ -23,20 +25,15 @@ class ChatController extends Controller
         $conversation = Conversation::firstOrCreate(
             [
                 'website_id' => $website->id,
-                'visitor_id' => $request->visitor_id
+                'visitor_id' => $request->visitor_id,
             ],
             [
-                'status' => 'active'
+                'status' => 'active',
+                'lead_stage' => 'discovery',
             ]
         );
 
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'sender' => 'visitor',
-            'message' => $request->message
-        ]);
-
-       $history = Message::where('conversation_id', $conversation->id)
+        $history = Message::where('conversation_id', $conversation->id)
             ->latest()
             ->take(10)
             ->get()
@@ -44,7 +41,7 @@ class ChatController extends Controller
             ->map(function ($msg) {
                 return [
                     'role' => $msg->sender === 'visitor' ? 'user' : 'assistant',
-                    'content' => $msg->message
+                    'content' => $msg->message,
                 ];
             })
             ->values()
@@ -53,18 +50,49 @@ class ChatController extends Controller
         Message::create([
             'conversation_id' => $conversation->id,
             'sender' => 'visitor',
-            'message' => $request->message
+            'message' => $request->message,
         ]);
+
+        $leadResult = $leadCaptureService->processMessage(
+            $website,
+            $conversation,
+            $request->message
+        );
+
+        $lead = $leadResult['lead'];
+        $leadStage = $leadResult['lead_stage'];
+        $nextLeadQuestion = $leadResult['next_question'];
 
         $aiText = $brain->analyze(
             $request->message,
             $website,
-            $history
+            $history,
+            $lead,
+            $leadStage,
+            $nextLeadQuestion
         );
+
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'sender' => 'ai',
+            'message' => $aiText,
+        ]);
 
         return response()->json([
             'reply' => $aiText,
-            'conversation_id' => $conversation->id
+            'conversation_id' => $conversation->id,
+            'lead' => $lead ? [
+                'id' => $lead->id,
+                'name' => $lead->name,
+                'email' => $lead->email,
+                'phone' => $lead->phone,
+                'country' => $lead->country,
+                'preferred_contact_time' => $lead->preferred_contact_time,
+                'product_interest' => $lead->product_interest,
+                'lead_score' => $lead->lead_score,
+                'status' => $lead->status,
+            ] : null,
+            'lead_stage' => $leadStage,
         ]);
     }
 }
