@@ -47,10 +47,13 @@ class WebsiteCrawlerService
                         'url' => $url,
                     ],
                     [
-                        'title' => $title,
+                       'title' => $title,
+                        'type' => 'page',
+                        'source_type' => 'crawler',
                         'content' => $content,
                         'content_hash' => hash('sha256', $content),
                         'is_indexed' => false,
+                        'is_active' => true,
                     ]
                 );
             }

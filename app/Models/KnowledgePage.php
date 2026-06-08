@@ -14,9 +14,17 @@ class KnowledgePage extends Model
         'url',
         'title',
         'type',
+        'source_type',
         'content',
         'content_hash',
         'is_indexed',
+        'is_active',
+        'indexed_at',
+    ];
+    protected $casts = [
+        'is_indexed' => 'boolean',
+        'is_active' => 'boolean',
+        'indexed_at' => 'datetime',
     ];
     public function website()
     {

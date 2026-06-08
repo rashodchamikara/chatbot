@@ -16,9 +16,13 @@ class KnowledgeSearchService
         $queryEmbedding = $this->embeddingService->embed($query);
 
         $chunks = KnowledgeChunk::with('page')
-            ->where('website_id', $website->id)
-            ->whereNotNull('embedding')
-            ->get();
+        ->where('website_id', $website->id)
+        ->whereNotNull('embedding')
+        ->whereHas('page', function ($query) {
+            $query->where('is_active', true)
+                ->where('is_indexed', true);
+        })
+        ->get();
 
         $ranked = [];
 

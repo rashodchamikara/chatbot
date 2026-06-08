@@ -83,6 +83,7 @@
                             <strong>Leads:</strong>
                             {{ $website->leads_count }}
                         </div>
+                        
                     </div>
 
                     <form
@@ -109,6 +110,14 @@
                             Index / Re-index Website
                         </button>
                     </form>
+                    <div class="mt-4">
+                        <a
+                            href="{{ route('admin.websites.knowledge.index', $website) }}"
+                            class="bg-blue-600 text-white px-4 py-2 rounded block text-center"
+                        >
+                            Manage Knowledge Base
+                        </a>
+                    </div>
                 </div>
 
                 <div class="bg-white rounded shadow p-6">
@@ -146,11 +155,12 @@
                     class="border rounded px-3 py-2 w-full text-sm font-mono"
                     onclick="this.select();"
                 ><script src="{{ url('http://localhost/ChatBot/widget/widget.js') }}"></script>
-<script>
-ChatAgent.init({
-    token: "{{ $website->embed_token }}",
-    server: "{{ url('/') }}"
-});
+                    <script>
+                    ChatAgent.init({
+                        token: "{{ $website->embed_token }}",
+                        server: "{{ url('/') }}",
+                        public_server: "http://localhost/ChatBot/widget/"
+                    });
 </script></textarea>
 
                 <p class="text-xs text-gray-500 mt-2">

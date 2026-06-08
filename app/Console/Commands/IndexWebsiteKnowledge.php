@@ -46,6 +46,7 @@ class IndexWebsiteKnowledge extends Command
 
             $page->update([
                 'is_indexed' => true,
+                'indexed_at' => now(),
             ]);
         }
 

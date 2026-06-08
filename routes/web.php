@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LeadController;
 use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\WebsiteController as AdminWebsiteController;
+use App\Http\Controllers\Admin\KnowledgePageController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -56,6 +57,36 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/admin/websites/{website}/index-knowledge', [AdminWebsiteController::class, 'indexKnowledge'])
         ->name('admin.websites.indexKnowledge');
+
+    Route::get('/admin/websites/{website}/knowledge', [KnowledgePageController::class, 'index'])
+    ->name('admin.websites.knowledge.index');
+
+    Route::get('/admin/websites/{website}/knowledge/create', [KnowledgePageController::class, 'create'])
+        ->name('admin.websites.knowledge.create');
+
+    Route::post('/admin/websites/{website}/knowledge', [KnowledgePageController::class, 'store'])
+        ->name('admin.websites.knowledge.store');
+
+    Route::delete('/admin/websites/{website}/knowledge/delete-all', [KnowledgePageController::class, 'deleteAllForWebsite'])
+        ->name('admin.websites.knowledge.deleteAll');
+
+    Route::get('/admin/knowledge-pages/{knowledgePage}', [KnowledgePageController::class, 'show'])
+        ->name('admin.knowledge.show');
+
+    Route::get('/admin/knowledge-pages/{knowledgePage}/edit', [KnowledgePageController::class, 'edit'])
+        ->name('admin.knowledge.edit');
+
+    Route::patch('/admin/knowledge-pages/{knowledgePage}', [KnowledgePageController::class, 'update'])
+        ->name('admin.knowledge.update');
+
+    Route::delete('/admin/knowledge-pages/{knowledgePage}', [KnowledgePageController::class, 'destroy'])
+        ->name('admin.knowledge.destroy');
+
+    Route::post('/admin/knowledge-pages/{knowledgePage}/index', [KnowledgePageController::class, 'indexPage'])
+        ->name('admin.knowledge.indexPage');
+
+    Route::post('/admin/knowledge-pages/{knowledgePage}/toggle-active', [KnowledgePageController::class, 'toggleActive'])
+        ->name('admin.knowledge.toggleActive');
 
 });
 
