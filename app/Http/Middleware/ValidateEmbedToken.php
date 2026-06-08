@@ -24,6 +24,12 @@ class ValidateEmbedToken
             return response()->json(['error' => 'Invalid token'], 403);
         }
 
+        if (!$website->is_active) {
+            return response()->json([
+                'error' => 'Website is inactive',
+            ], 403);
+        }
+
         // if ($website->verify_domain) {
 
         //     $origin = $request->header('Origin');

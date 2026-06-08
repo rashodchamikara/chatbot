@@ -19,6 +19,11 @@ class Website extends Model
         'is_active'
     ];
 
+    protected $casts = [
+        'verify_domain' => 'boolean',
+        'is_active' => 'boolean',
+    ];
+
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);

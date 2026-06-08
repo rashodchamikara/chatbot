@@ -10,10 +10,13 @@ class LeadController extends Controller
 {
     public function index(Request $request)
     {
-        $tenantId = auth()->user()->tenant_id;
+        $user = auth()->user();
 
-        $query = Lead::with(['website', 'conversation'])
-            ->where('tenant_id', $tenantId);
+        $query = Lead::with(['website', 'tenant', 'conversation']);
+
+        if (!$user->isSuperAdmin()) {
+            $query->where('tenant_id', $user->tenant_id);
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -41,9 +44,10 @@ class LeadController extends Controller
 
     public function show(Lead $lead)
     {
-        $this->authorizeTenantLead($lead);
+        $this->authorizeLeadAccess($lead);
 
         $lead->load([
+            'tenant',
             'website',
             'conversation.messages',
         ]);
@@ -53,7 +57,7 @@ class LeadController extends Controller
 
     public function updateStatus(Request $request, Lead $lead)
     {
-        $this->authorizeTenantLead($lead);
+        $this->authorizeLeadAccess($lead);
 
         $request->validate([
             'status' => 'required|in:new,qualified,contacted,converted,closed',
@@ -72,9 +76,15 @@ class LeadController extends Controller
             ->with('success', 'Lead status updated successfully.');
     }
 
-    private function authorizeTenantLead(Lead $lead): void
+    private function authorizeLeadAccess(Lead $lead): void
     {
-        if ($lead->tenant_id !== auth()->user()->tenant_id) {
+        $user = auth()->user();
+
+        if ($user->isSuperAdmin()) {
+            return;
+        }
+
+        if ($lead->tenant_id !== $user->tenant_id) {
             abort(403, 'Unauthorized lead access.');
         }
     }

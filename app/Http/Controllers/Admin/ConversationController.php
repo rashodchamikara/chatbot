@@ -11,13 +11,16 @@ class ConversationController extends Controller
 {
     public function index(Request $request)
     {
-        $tenantId = auth()->user()->tenant_id;
+        $user = auth()->user();
 
-        $websiteIds = Website::where('tenant_id', $tenantId)
-            ->pluck('id');
+        $query = Conversation::with(['website.tenant', 'lead']);
 
-        $query = Conversation::with(['website', 'lead'])
-            ->whereIn('website_id', $websiteIds);
+        if (!$user->isSuperAdmin()) {
+            $websiteIds = Website::where('tenant_id', $user->tenant_id)
+                ->pluck('id');
+
+            $query->whereIn('website_id', $websiteIds);
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -37,10 +40,10 @@ class ConversationController extends Controller
 
     public function show(Conversation $conversation)
     {
-        $this->authorizeTenantConversation($conversation);
+        $this->authorizeConversationAccess($conversation);
 
         $conversation->load([
-            'website',
+            'website.tenant',
             'lead',
             'messages' => function ($query) {
                 $query->orderBy('created_at');
@@ -50,15 +53,17 @@ class ConversationController extends Controller
         return view('admin.conversations.show', compact('conversation'));
     }
 
-    private function authorizeTenantConversation(Conversation $conversation): void
+    private function authorizeConversationAccess(Conversation $conversation): void
     {
-        $tenantId = auth()->user()->tenant_id;
+        $user = auth()->user();
 
-        $allowedWebsiteIds = Website::where('tenant_id', $tenantId)
-            ->pluck('id')
-            ->toArray();
+        if ($user->isSuperAdmin()) {
+            return;
+        }
 
-        if (!in_array($conversation->website_id, $allowedWebsiteIds)) {
+        $website = Website::find($conversation->website_id);
+
+        if (!$website || $website->tenant_id !== $user->tenant_id) {
             abort(403, 'Unauthorized conversation access.');
         }
     }

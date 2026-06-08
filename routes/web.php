@@ -7,6 +7,7 @@ use App\Http\Controllers\WebsiteController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LeadController;
 use App\Http\Controllers\Admin\ConversationController;
+use App\Http\Controllers\Admin\WebsiteController as AdminWebsiteController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -31,6 +32,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/admin/conversations/{conversation}', [ConversationController::class, 'show'])
         ->name('admin.conversations.show');
+
+    Route::get('/admin/websites', [AdminWebsiteController::class, 'index'])
+    ->name('admin.websites.index');
+
+    Route::get('/admin/websites/create', [AdminWebsiteController::class, 'create'])
+        ->name('admin.websites.create');
+
+    Route::post('/admin/websites', [AdminWebsiteController::class, 'store'])
+        ->name('admin.websites.store');
+
+    Route::get('/admin/websites/{website}', [AdminWebsiteController::class, 'show'])
+        ->name('admin.websites.show');
+
+    Route::get('/admin/websites/{website}/edit', [AdminWebsiteController::class, 'edit'])
+        ->name('admin.websites.edit');
+
+    Route::patch('/admin/websites/{website}', [AdminWebsiteController::class, 'update'])
+        ->name('admin.websites.update');
+
+    Route::post('/admin/websites/{website}/regenerate-token', [AdminWebsiteController::class, 'regenerateToken'])
+        ->name('admin.websites.regenerateToken');
+
+    Route::post('/admin/websites/{website}/index-knowledge', [AdminWebsiteController::class, 'indexKnowledge'])
+        ->name('admin.websites.indexKnowledge');
 
 });
 
