@@ -105,7 +105,47 @@
                             max="100"
                             class="border rounded px-3 py-2 w-full mb-3"
                         >
+                        <div>
+                        <strong>Indexing Status:</strong>
 
+                        @if($website->indexing_status === 'completed')
+                            <span class="px-2 py-1 text-xs rounded bg-green-100 text-green-700">
+                                Completed
+                            </span>
+                        @elseif($website->indexing_status === 'processing')
+                            <span class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700">
+                                Processing
+                            </span>
+                        @elseif($website->indexing_status === 'failed')
+                            <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-700">
+                                Failed
+                            </span>
+                        @else
+                            <span class="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-700">
+                                Pending
+                            </span>
+                        @endif
+                    </div>
+                    @if($website->indexing_started_at)
+                        <div>
+                            <strong>Indexing Started:</strong>
+                            {{ $website->indexing_started_at->format('Y-m-d H:i') }}
+                        </div>
+                    @endif
+
+                    @if($website->indexing_completed_at)
+                        <div>
+                            <strong>Indexing Completed:</strong>
+                            {{ $website->indexing_completed_at->format('Y-m-d H:i') }}
+                        </div>
+                    @endif
+
+                    @if($website->indexing_error)
+                        <div class="mt-3 p-3 bg-red-50 text-red-700 rounded text-xs">
+                            <strong>Indexing Error:</strong>
+                            {{ $website->indexing_error }}
+                        </div>
+                    @endif
                         <button class="bg-green-600 text-white px-4 py-2 rounded w-full">
                             Index / Re-index Website
                         </button>
@@ -118,6 +158,7 @@
                             Manage Knowledge Base
                         </a>
                     </div>
+
                 </div>
 
                 <div class="bg-white rounded shadow p-6">
@@ -154,12 +195,12 @@
                     rows="8"
                     class="border rounded px-3 py-2 w-full text-sm font-mono"
                     onclick="this.select();"
-                ><script src="{{ url('http://localhost/ChatBot/widget/widget.js') }}"></script>
+                ><script src="{{ url('https://chat.tetris.lk/widget/widget.js') }}"></script>
                     <script>
                     ChatAgent.init({
                         token: "{{ $website->embed_token }}",
                         server: "{{ url('/') }}",
-                        public_server: "http://localhost/ChatBot/widget/"
+                        public_server: "{{ url('/') }}/widget/"
                     });
 </script></textarea>
 
@@ -210,4 +251,11 @@
 
         </div>
     </div>
+    @if(in_array($website->indexing_status, ['pending', 'processing']))
+    <script>
+        setTimeout(function () {
+            window.location.reload();
+        }, 10000);
+    </script>
+   @endif
 </x-app-layout>

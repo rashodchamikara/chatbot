@@ -16,12 +16,18 @@ class Website extends Model
         'domain',
         'verify_domain',
         'embed_token',
-        'is_active'
+        'is_active',
+        'indexing_status',
+        'indexing_started_at',
+        'indexing_completed_at',
+        'indexing_error',
     ];
 
     protected $casts = [
         'verify_domain' => 'boolean',
         'is_active' => 'boolean',
+        'indexing_started_at' => 'datetime',
+        'indexing_completed_at' => 'datetime',
     ];
 
     public function tenant()

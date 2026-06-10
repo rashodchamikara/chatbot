@@ -8,6 +8,7 @@ use App\Models\Tenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Artisan;
+use App\Jobs\IndexWebsiteKnowledgeJob;
 
 class WebsiteController extends Controller
 {
@@ -108,9 +109,11 @@ class WebsiteController extends Controller
             'embed_token' => Str::random(48),
         ]);
 
+        IndexWebsiteKnowledgeJob::dispatch($website->id, null);
+
         return redirect()
             ->route('admin.websites.show', $website)
-            ->with('success', 'Website created successfully.');
+            ->with('success', 'Website created successfully. Crawling and indexing has started in the background.');
     }
 
     public function show(Website $website)
@@ -198,20 +201,32 @@ class WebsiteController extends Controller
     {
         $this->authorizeWebsiteAccess($website);
 
+        if (in_array($website->indexing_status, ['pending', 'processing'])) {
+            return redirect()
+                ->back()
+                ->with('success', 'Indexing is already running for this website.');
+        }
+
         $request->validate([
-            'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:10000'],
         ]);
 
-        $limit = $request->input('limit', 20);
+        $limit = $request->filled('limit')
+                ? (int) $request->input('limit')
+                : null;
 
-        Artisan::call('knowledge:index', [
-            'website_id' => $website->id,
-            '--limit' => $limit,
+       $website->update([
+            'indexing_status' => 'pending',
+            'indexing_started_at' => null,
+            'indexing_completed_at' => null,
+            'indexing_error' => null,
         ]);
+
+        IndexWebsiteKnowledgeJob::dispatch($website->id, $limit);
 
         return redirect()
             ->back()
-            ->with('success', 'Website knowledge indexing completed.');
+            ->with('success', 'Website knowledge indexing started.');
     }
 
     private function authorizeWebsiteAccess(Website $website): void
