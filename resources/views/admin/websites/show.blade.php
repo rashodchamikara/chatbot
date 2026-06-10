@@ -102,7 +102,7 @@
                             name="limit"
                             value="20"
                             min="1"
-                            max="100"
+                            max="1000"
                             class="border rounded px-3 py-2 w-full mb-3"
                         >
                         <div>

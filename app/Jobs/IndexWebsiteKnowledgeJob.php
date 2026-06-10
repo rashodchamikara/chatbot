@@ -19,7 +19,7 @@ class IndexWebsiteKnowledgeJob implements ShouldQueue
 
     public function __construct(
         public int $websiteId,
-        public ?int $limit = NULL
+        public int $limit = 100
     ) {}
 
     public function handle(
@@ -40,7 +40,7 @@ class IndexWebsiteKnowledgeJob implements ShouldQueue
             Log::info('Website indexing started', [
                 'website_id' => $website->id,
                 'domain' => $website->domain,
-                'limit' => $this->limit ?? 'all',
+                'limit' => $this->limit,
             ]);
 
             $crawler->crawlWebsite($website, $this->limit);

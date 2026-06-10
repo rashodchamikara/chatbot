@@ -109,7 +109,7 @@ class WebsiteController extends Controller
             'embed_token' => Str::random(48),
         ]);
 
-        IndexWebsiteKnowledgeJob::dispatch($website->id, null);
+        IndexWebsiteKnowledgeJob::dispatch($website->id, 100);
 
         return redirect()
             ->route('admin.websites.show', $website)

@@ -11,7 +11,7 @@ use DOMXPath;
 
 class WebsiteCrawlerService
 {
-    public function crawlWebsite(Website $website,  ?int $limit = null): array
+    public function crawlWebsite(Website $website,  int $limit = 100): array
     {
         $startUrl = rtrim($website->domain, '/');
 
@@ -23,7 +23,7 @@ class WebsiteCrawlerService
         $queue = [$startUrl];
 
         while (!empty($queue)) {
-            if ($limit !== null && count($visited) >= $limit) {
+            if (count($visited) >= $limit) {
                 break;
             }
             $url = array_shift($queue);
