@@ -19,7 +19,7 @@ class IndexWebsiteKnowledgeJob implements ShouldQueue
 
     public function __construct(
         public int $websiteId,
-        public int $limit = NULL
+        public ?int $limit = NULL
     ) {}
 
     public function handle(
