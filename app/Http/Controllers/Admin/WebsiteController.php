@@ -88,6 +88,15 @@ class WebsiteController extends Controller
             ? $validated['tenant_id']
             : $user->tenant_id;
 
+        if (!$tenantId) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors([
+                    'tenant_id' => 'No tenant is assigned to this user. Please assign a tenant or use a super admin account.',
+                ]);
+        }
+
         $domain = $this->normalizeDomain($validated['domain']);
 
         $website = Website::create([
