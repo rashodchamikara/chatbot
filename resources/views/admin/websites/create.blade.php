@@ -20,7 +20,7 @@
                     </div>
                 @endif
 
-                <form method="POST" action="{{ route('admin.websites.store') }}">
+                <form method="POST" action="{{ route('admin.websites.store') }}" enctype="multipart/form-data">
                     @csrf
 
                     @if(auth()->user()->isSuperAdmin())
@@ -87,6 +87,99 @@
                             For local testing, you may disable this. For production websites, keep it enabled.
                         </p>
                     </div>
+                    <div class="mt-8 border-t pt-6">
+                    <h3 class="text-lg font-semibold mb-4">Chatbot Settings</h3>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-1">
+                            Chatbot Name
+                        </label>
+
+                        <input
+                            type="text"
+                            name="chatbot_name"
+                            value="{{ old('chatbot_name') }}"
+                            placeholder="Eg: Sales Assistant"
+                            class="border rounded px-3 py-2 w-full"
+                        >
+
+                        @error('chatbot_name')
+                            <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2">
+                            Color Theme
+                        </label>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            @foreach($themes as $themeKey => $theme)
+                                <label class="border rounded p-3 cursor-pointer flex items-center gap-3">
+                                    <input
+                                        type="radio"
+                                        name="chatbot_theme"
+                                        value="{{ $themeKey }}"
+                                        @checked(old('chatbot_theme', config('chatbot.default_theme')) === $themeKey)
+                                    >
+
+                                    <span
+                                        class="inline-block w-6 h-6 rounded-full"
+                                        style="background: {{ $theme['primary'] }}"
+                                    ></span>
+
+                                    <span>{{ $theme['label'] }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+
+                        @error('chatbot_theme')
+                            <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-1">
+                            Chatbot Avatar
+                        </label>
+
+                        <input
+                            type="file"
+                            name="chatbot_avatar"
+                            accept="image/*"
+                            class="border rounded px-3 py-2 w-full"
+                        >
+
+                        <p class="text-xs text-gray-500 mt-1">
+                            Recommended size: 200x200px. Supported: JPG, PNG, WEBP, SVG. Max: 2MB.
+                        </p>
+
+                        @error('chatbot_avatar')
+                            <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-1">
+                            Initial Chatbot Instructions
+                        </label>
+
+                        <textarea
+                            name="chatbot_instructions"
+                            rows="6"
+                            placeholder="Example: Use a friendly professional tone. If user asks for pricing, explain that pricing depends on requirements and collect their contact details. Always encourage booking a consultation."
+                            class="border rounded px-3 py-2 w-full"
+                        >{{ old('chatbot_instructions') }}</textarea>
+
+                        <p class="text-xs text-gray-500 mt-1">
+                            These instructions will be included in the AI system prompt for this website.
+                        </p>
+
+                        @error('chatbot_instructions')
+                            <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
 
                     <div class="mb-6">
                         <label class="inline-flex items-center">

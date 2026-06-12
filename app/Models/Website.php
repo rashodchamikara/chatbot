@@ -13,6 +13,10 @@ class Website extends Model
     protected $fillable = [
         'tenant_id',
         'name',
+        'chatbot_name',
+        'chatbot_theme',
+        'chatbot_avatar',
+        'chatbot_instructions',
         'domain',
         'verify_domain',
         'embed_token',

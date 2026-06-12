@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Artisan;
 use App\Jobs\IndexWebsiteKnowledgeJob;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class WebsiteController extends Controller
 {
@@ -65,7 +67,9 @@ class WebsiteController extends Controller
             $tenants = Tenant::orderBy('name')->get();
         }
 
-        return view('admin.websites.create', compact('tenants'));
+        $themes = config('chatbot.themes');
+
+        return view('admin.websites.create', compact('tenants', 'themes'));
     }
 
     public function store(Request $request)
@@ -77,6 +81,14 @@ class WebsiteController extends Controller
             'domain' => ['required', 'string', 'max:1000'],
             'verify_domain' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
+            'chatbot_name' => ['nullable', 'string', 'max:100'],
+            'chatbot_theme' => [
+                'required',
+                'string',
+                Rule::in(array_keys(config('chatbot.themes'))),
+            ],
+            'chatbot_avatar' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,svg', 'max:2048'],
+            'chatbot_instructions' => ['nullable', 'string', 'max:10000'],
         ];
 
         if ($user->isSuperAdmin()) {
@@ -99,7 +111,12 @@ class WebsiteController extends Controller
         }
 
         $domain = $this->normalizeDomain($validated['domain']);
+        $avatarPath = null;
 
+        if ($request->hasFile('chatbot_avatar')) {
+            $avatarPath = $request->file('chatbot_avatar')
+                ->store('chatbot-avatars', 'public');
+        }
         $website = Website::create([
             'tenant_id' => $tenantId,
             'name' => $validated['name'],
@@ -107,6 +124,12 @@ class WebsiteController extends Controller
             'verify_domain' => $request->boolean('verify_domain'),
             'is_active' => $request->boolean('is_active', true),
             'embed_token' => Str::random(48),
+            'indexing_status' => 'pending',
+
+            'chatbot_name' => $validated['chatbot_name'] ?: $validated['name'] . ' Assistant',
+            'chatbot_theme' => $validated['chatbot_theme'] ?? config('chatbot.default_theme'),
+            'chatbot_avatar' => $avatarPath,
+            'chatbot_instructions' => $validated['chatbot_instructions'] ?? null,
         ]);
 
         IndexWebsiteKnowledgeJob::dispatch($website->id, 100);
@@ -147,7 +170,9 @@ class WebsiteController extends Controller
             $tenants = Tenant::orderBy('name')->get();
         }
 
-        return view('admin.websites.edit', compact('website', 'tenants'));
+        $themes = config('chatbot.themes');
+
+        return view('admin.websites.edit', compact('website', 'tenants', 'themes'));
     }
 
     public function update(Request $request, Website $website)
@@ -161,6 +186,14 @@ class WebsiteController extends Controller
             'domain' => ['required', 'string', 'max:1000'],
             'verify_domain' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
+            'chatbot_name' => ['nullable', 'string', 'max:100'],
+            'chatbot_theme' => [
+                'required',
+                'string',
+                Rule::in(array_keys(config('chatbot.themes'))),
+            ],
+            'chatbot_avatar' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,svg', 'max:2048'],
+            'chatbot_instructions' => ['nullable', 'string', 'max:10000'],
         ];
 
         if ($user->isSuperAdmin()) {
@@ -177,7 +210,18 @@ class WebsiteController extends Controller
         if ($user->isSuperAdmin()) {
             $website->tenant_id = $validated['tenant_id'];
         }
+        $website->chatbot_name = $validated['chatbot_name'] ?: $validated['name'] . ' Assistant';
+        $website->chatbot_theme = $validated['chatbot_theme'];
+        $website->chatbot_instructions = $validated['chatbot_instructions'] ?? null;
 
+        if ($request->hasFile('chatbot_avatar')) {
+            if ($website->chatbot_avatar) {
+                Storage::disk('public')->delete($website->chatbot_avatar);
+            }
+
+            $website->chatbot_avatar = $request->file('chatbot_avatar')
+                ->store('chatbot-avatars', 'public');
+        }
         $website->save();
 
         return redirect()

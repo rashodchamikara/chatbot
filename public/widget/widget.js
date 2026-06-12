@@ -4,11 +4,23 @@
 
         config: {},
 
-        init(options) {
+        widgetConfig: {
+            chatbot_name: 'AI Assistant',
+            avatar_url: null,
+            theme: {
+                primary: '#2563eb',
+                secondary: '#eff6ff',
+                text: '#ffffff'
+            }
+        },
+
+        async init(options) {
 
             this.config = options;
 
             this.loadStyles();
+
+            await this.loadWidgetConfig();
 
             this.createWidget();
         },
@@ -24,6 +36,65 @@
             document.head.appendChild(css);
         },
 
+        async loadWidgetConfig() {
+
+            try {
+
+                const response = await fetch(
+                    this.config.server + '/api/widget/config',
+                    {
+                        method: 'GET',
+
+                        headers: {
+                            'Accept': 'application/json',
+
+                            'X-EMBED-TOKEN': this.config.token
+                        }
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error('Widget config request failed');
+                }
+
+                const data = await response.json();
+
+                this.widgetConfig = {
+                    chatbot_name:
+                        data.chatbot_name || 'AI Assistant',
+
+                    avatar_url:
+                        data.avatar_url || null,
+
+                    theme: {
+                        primary:
+                            data.theme?.primary || '#2563eb',
+
+                        secondary:
+                            data.theme?.secondary || '#eff6ff',
+
+                        text:
+                            data.theme?.text || '#ffffff'
+                    }
+                };
+
+            } catch (error) {
+
+                console.error('Chatbot config load failed:', error);
+
+                // Continue with default config
+                this.widgetConfig = {
+                    chatbot_name: 'AI Assistant',
+                    avatar_url: null,
+                    theme: {
+                        primary: '#2563eb',
+                        secondary: '#eff6ff',
+                        text: '#ffffff'
+                    }
+                };
+            }
+        },
+
         createWidget() {
 
             const btn = document.createElement('div');
@@ -31,6 +102,12 @@
             btn.id = 'chat-agent-button';
 
             btn.innerHTML = '💬';
+
+            btn.style.backgroundColor =
+                this.widgetConfig.theme.primary;
+
+            btn.style.color =
+                this.widgetConfig.theme.text;
 
             document.body.appendChild(btn);
 
@@ -43,20 +120,39 @@
 
                 win.style.display =
                     win.style.display === 'block'
-                    ? 'none'
-                    : 'block';
-
+                        ? 'none'
+                        : 'block';
             });
         },
 
         createWindow() {
+
+            const avatarHtml = this.widgetConfig.avatar_url
+                ? `
+                    <img
+                        id="chat-avatar"
+                        src="${this.escapeHtml(this.widgetConfig.avatar_url)}"
+                        alt="${this.escapeHtml(this.widgetConfig.chatbot_name)}"
+                    >
+                `
+                : `
+                    <div id="chat-avatar-placeholder">
+                        🤖
+                    </div>
+                `;
 
             const html = `
 
                 <div id="chat-window">
 
                     <div id="chat-header">
-                        AI Assistant
+                        <div id="chat-header-left">
+                            ${avatarHtml}
+
+                            <div id="chat-header-title">
+                                ${this.escapeHtml(this.widgetConfig.chatbot_name)}
+                            </div>
+                        </div>
                     </div>
 
                     <div id="chat-messages"></div>
@@ -84,6 +180,8 @@
                 html
             );
 
+            this.applyTheme();
+
             const self = this;
 
             document
@@ -109,6 +207,35 @@
             );
         },
 
+        applyTheme() {
+
+            const theme = this.widgetConfig.theme;
+
+            const header =
+                document.getElementById('chat-header');
+
+            const sendButton =
+                document.getElementById('chat-send');
+
+            const button =
+                document.getElementById('chat-agent-button');
+
+            if (header) {
+                header.style.backgroundColor = theme.primary;
+                header.style.color = theme.text;
+            }
+
+            if (sendButton) {
+                sendButton.style.backgroundColor = theme.primary;
+                sendButton.style.color = theme.text;
+            }
+
+            if (button) {
+                button.style.backgroundColor = theme.primary;
+                button.style.color = theme.text;
+            }
+        },
+
         async handleSend() {
 
             const input =
@@ -128,6 +255,8 @@
 
             input.value = '';
 
+            this.setSendingState(true);
+
             try {
 
                 const response =
@@ -135,7 +264,7 @@
 
                 this.appendMessage(
                     'ai',
-                    response.reply
+                    response.reply || 'Sorry, I could not generate a response.'
                 );
 
             } catch (error) {
@@ -146,6 +275,28 @@
                     'ai',
                     'Sorry, something went wrong.'
                 );
+
+            } finally {
+
+                this.setSendingState(false);
+            }
+        },
+
+        setSendingState(isSending) {
+
+            const sendButton =
+                document.getElementById('chat-send');
+
+            const input =
+                document.getElementById('chat-input');
+
+            if (sendButton) {
+                sendButton.disabled = isSending;
+                sendButton.innerText = isSending ? '...' : 'Send';
+            }
+
+            if (input) {
+                input.disabled = isSending;
             }
         },
 
@@ -206,6 +357,9 @@
                             'Content-Type':
                                 'application/json',
 
+                            'Accept':
+                                'application/json',
+
                             'X-EMBED-TOKEN':
                                 this.config.token
                         },
@@ -227,6 +381,20 @@
             }
 
             return response.json();
+        },
+
+        escapeHtml(value) {
+
+            if (!value) {
+                return '';
+            }
+
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
 
     };
