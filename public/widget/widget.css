@@ -56,3 +56,18 @@
     color:black;
     padding: 10px;
 }
+.ai-sales-widget-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    font-weight: 600;
+}
+
+.ai-sales-widget-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    object-fit: cover;
+    background: #ffffff;
+}

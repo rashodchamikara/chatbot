@@ -95,4 +95,25 @@ class ChatController extends Controller
             'lead_stage' => $leadStage,
         ]);
     }
+    public function config(Request $request)
+    {
+        $website = $request->website;
+
+        $themeKey = $website->chatbot_theme ?: config('chatbot.default_theme');
+        $theme = config("chatbot.themes.{$themeKey}") ?? config('chatbot.themes.blue');
+
+        return response()->json([
+            'website_id' => $website->id,
+            'chatbot_name' => $website->chatbot_name ?: $website->name . ' Assistant',
+            'theme' => [
+                'key' => $themeKey,
+                'primary' => $theme['primary'],
+                'secondary' => $theme['secondary'],
+                'text' => $theme['text'],
+            ],
+            'avatar_url' => $website->chatbot_avatar
+                ? asset('storage/' . $website->chatbot_avatar)
+                : null,
+        ]);
+    }
 }

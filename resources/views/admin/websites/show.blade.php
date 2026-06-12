@@ -179,6 +179,42 @@
                             Regenerate Token
                         </button>
                     </form>
+                    <div class="mt-6 bg-white border rounded p-5">
+                        <h3 class="text-lg font-semibold mb-4">Chatbot Settings</h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <strong>Name:</strong>
+                                {{ $website->chatbot_name ?: $website->name . ' Assistant' }}
+                            </div>
+
+                            <div>
+                                <strong>Theme:</strong>
+                                {{ config('chatbot.themes.' . $website->chatbot_theme . '.label') ?? ucfirst($website->chatbot_theme) }}
+                            </div>
+
+                            <div>
+                                <strong>Avatar:</strong>
+
+                                @if($website->chatbot_avatar)
+                                    <img
+                                        src="{{ asset('storage/' . $website->chatbot_avatar) }}"
+                                        alt="Chatbot Avatar"
+                                        class="mt-2 w-16 h-16 rounded-full object-cover border"
+                                    >
+                                @else
+                                    <span>No avatar uploaded</span>
+                                @endif
+                            </div>
+
+                            <div>
+                                <strong>Instructions:</strong>
+                                <div class="mt-2 text-sm bg-gray-50 border rounded p-3 whitespace-pre-line">
+                                    {{ $website->chatbot_instructions ?: 'No custom instructions provided.' }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
             </div>
