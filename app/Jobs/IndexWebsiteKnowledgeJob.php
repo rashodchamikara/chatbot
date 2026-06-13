@@ -10,6 +10,7 @@ use App\Services\EmbeddingService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class IndexWebsiteKnowledgeJob implements ShouldQueue
 {
@@ -51,7 +52,29 @@ class IndexWebsiteKnowledgeJob implements ShouldQueue
                 ->get();
 
             foreach ($pages as $page) {
-                if (!$page->content || strlen($page->content) < 50) {
+                $content = (string) $page->content;
+
+                if ($content === '' || strlen($content) < 50) {
+                    $page->update([
+                        'is_indexed' => true,
+                        'indexed_at' => now(),
+                    ]);
+
+                    continue;
+                }
+
+                if (!mb_check_encoding($content, 'UTF-8')) {
+                    Log::warning('Skipping non UTF-8 knowledge page content', [
+                        'website_id' => $website->id,
+                        'page_id' => $page->id,
+                        'url' => $page->url,
+                    ]);
+
+                    $page->update([
+                        'is_indexed' => true,
+                        'indexed_at' => now(),
+                    ]);
+
                     continue;
                 }
 
@@ -92,7 +115,7 @@ class IndexWebsiteKnowledgeJob implements ShouldQueue
         } catch (\Throwable $e) {
             $website->update([
                 'indexing_status' => 'failed',
-                'indexing_error' => $e->getMessage(),
+                'indexing_error' => $this->cleanErrorMessage($e),
                 'indexing_completed_at' => now(),
             ]);
 
@@ -108,16 +131,36 @@ class IndexWebsiteKnowledgeJob implements ShouldQueue
     }
 
     public function failed(\Throwable $exception): void
-    {
-        $website = Website::find($this->websiteId);
+        {
+            $website = Website::find($this->websiteId);
 
-        if ($website) {
-            $website->update([
-                'indexing_status' => 'failed',
-                'indexing_error' => $exception->getMessage(),
-                'indexing_completed_at' => now(),
+            if ($website) {
+                $website->update([
+                    'indexing_status' => 'failed',
+                    'indexing_error' => $this->cleanErrorMessage($exception),
+                    'indexing_completed_at' => now(),
+                ]);
+            }
+
+            Log::error('Website indexing job failed permanently', [
+                'website_id' => $this->websiteId,
+                'error' => $this->cleanErrorMessage($exception),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
             ]);
         }
+
+    private function cleanErrorMessage(\Throwable $e): string
+    {
+        $message = $e->getMessage();
+
+        // Remove invalid UTF-8 / binary bytes.
+        $message = mb_convert_encoding($message, 'UTF-8', 'UTF-8');
+
+        // Remove control characters except line breaks/tabs.
+        $message = preg_replace('/[^\P{C}\n\r\t]+/u', '', $message);
+
+        return Str::limit($message ?: 'Unknown indexing error.', 1000);
     }
 
 }

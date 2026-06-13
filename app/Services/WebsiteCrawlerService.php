@@ -27,6 +27,9 @@ class WebsiteCrawlerService
                 break;
             }
             $url = array_shift($queue);
+            if ($this->shouldCrawlUrl($url)) {
+                continue;
+            }
 
             if (isset($visited[$url])) {
                 continue;
@@ -35,7 +38,37 @@ class WebsiteCrawlerService
             $visited[$url] = true;
 
             try {
-                $html = Http::timeout(10)->get($url)->body();
+                $response = Http::timeout(25)
+                ->withHeaders([
+                    'User-Agent' => 'ChatBotIndexer/1.0',
+                    'Accept' => 'text/html,application/xhtml+xml',
+                ])
+                ->get($url);
+
+            if (!$response->successful()) {
+                continue;
+            }
+
+            $contentType = strtolower($response->header('Content-Type', ''));
+
+            if (
+                !str_contains($contentType, 'text/html') &&
+                !str_contains($contentType, 'application/xhtml+xml')
+            ) {
+                \Log::info('Skipping non-HTML URL during crawl', [
+                    'url' => $url,
+                    'content_type' => $contentType,
+                ]);
+
+                continue;
+            }
+
+            $html = $response->body();
+
+            if (!mb_check_encoding($html, 'UTF-8')) {
+                $html = mb_convert_encoding($html, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+            }
+
             } catch (\Throwable $e) {
                 continue;
             }
@@ -130,5 +163,63 @@ class WebsiteCrawlerService
         }
 
         return rtrim($baseUrl, '/') . '/' . ltrim($href, '/');
+    }
+    private function shouldCrawlUrl(string $url): bool
+    {
+        $url = trim($url);
+
+        if ($url === '') {
+            return false;
+        }
+
+        $lowerUrl = strtolower($url);
+
+        if (
+            str_starts_with($lowerUrl, 'mailto:') ||
+            str_starts_with($lowerUrl, 'tel:') ||
+            str_starts_with($lowerUrl, 'javascript:') ||
+            str_starts_with($lowerUrl, '#')
+        ) {
+            return false;
+        }
+
+        $path = strtolower(parse_url($url, PHP_URL_PATH) ?? '');
+
+        $blockedExtensions = [
+            '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico',
+            '.pdf', '.zip', '.rar', '.7z',
+            '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+            '.mp4', '.mp3', '.avi', '.mov', '.webm',
+            '.css', '.js', '.xml',
+        ];
+
+        foreach ($blockedExtensions as $extension) {
+            if (str_ends_with($path, $extension)) {
+                return false;
+            }
+        }
+
+        $blockedPatterns = [
+            '/wp-admin',
+            '/admin',
+            '/login',
+            '/logout',
+            '/register',
+            '/cart',
+            '/checkout',
+            '/my-account',
+            '/account',
+            '/search',
+            '?s=',
+            '?add-to-cart=',
+        ];
+
+        foreach ($blockedPatterns as $pattern) {
+            if (str_contains($lowerUrl, $pattern)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
