@@ -463,3 +463,15 @@
         box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
     }
 }
+.chat-system-message {
+    width: fit-content;
+    max-width: 85%;
+    margin: 8px auto 14px auto;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(107, 114, 128, 0.12);
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+}

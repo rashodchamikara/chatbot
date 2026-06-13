@@ -10,4 +10,5 @@ Route::middleware('embed.token')->post('/chat', [ChatController::class, 'message
 Route::middleware([ValidateEmbedToken::class])->group(function () {
     Route::get('/widget/config', [ChatController::class, 'config']);
     Route::post('/chat', [ChatController::class, 'message']);
+    Route::get('/chat/history', [ChatController::class, 'history']);
 });

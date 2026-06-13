@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Services\SalesBrainService;
 use App\Services\LeadCaptureService;
 
+
 class ChatController extends Controller
 {
     public function message(
@@ -116,4 +117,52 @@ class ChatController extends Controller
                 : null,
         ]);
     }
+    public function history(Request $request)
+        {
+            $request->validate([
+                'visitor_id' => ['required', 'string', 'max:255'],
+                'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+            ]);
+
+            $website = $request->website ?? $request->attributes->get('website');
+
+            if (!$website) {
+                return response()->json([
+                    'message' => 'Website could not be resolved from embed token.',
+                ], 404);
+            }
+
+            $limit = (int) $request->input('limit', 50);
+
+            $conversation = Conversation::where('website_id', $website->id)
+                ->where('visitor_id', $request->visitor_id)
+                ->first();
+
+            if (!$conversation) {
+                return response()->json([
+                    'conversation_id' => null,
+                    'messages' => [],
+                ]);
+            }
+
+            $messages = Message::where('conversation_id', $conversation->id)
+                ->latest('id')
+                ->limit($limit)
+                ->get()
+                ->sortBy('id')
+                ->values()
+                ->map(function ($message) {
+                    return [
+                        'id' => $message->id,
+                        'sender' => $message->sender,
+                        'message' => $message->message,
+                        'created_at' => optional($message->created_at)->toDateTimeString(),
+                    ];
+                });
+
+            return response()->json([
+                'conversation_id' => $conversation->id,
+                'messages' => $messages,
+            ]);
+        }
 }

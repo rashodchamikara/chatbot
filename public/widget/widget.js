@@ -100,8 +100,7 @@
                 };
             }
         },
-
-        createWidget() {
+            createWidget() {
             if (document.getElementById('chat-agent-root')) {
                 return;
             }
@@ -168,10 +167,6 @@
             this.applyTheme();
             this.bindEvents();
 
-            this.appendMessage(
-                'ai',
-                'Hello 👋 How can I help you today?'
-            );
         },
 
         getAvatarHtml() {
@@ -250,6 +245,10 @@
 
             this.state.isOpen = true;
 
+            if (!this.state.historyLoaded) {
+                this.loadConversationHistory();
+            }
+
             setTimeout(() => {
                 if (input) {
                     input.focus();
@@ -309,6 +308,12 @@
             } finally {
                 this.setSendingState(false);
             }
+        },
+        state: {
+            isOpen: false,
+            isSending: false,
+            isReady: false,
+            historyLoaded: false
         },
 
         setSendingState(isSending) {
@@ -450,7 +455,90 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
-        }
+        },
+        async loadConversationHistory() {
+            const messages = document.getElementById('chat-messages');
+
+            if (!messages) {
+                return;
+            }
+
+            messages.innerHTML = '';
+
+            this.appendSystemMessage('Loading conversation...');
+
+            try {
+                const response = await this.fetchConversationHistory();
+
+                messages.innerHTML = '';
+
+                if (response.messages && response.messages.length > 0) {
+                    response.messages.forEach((item) => {
+                        this.appendMessage(
+                            item.sender === 'visitor' ? 'visitor' : 'ai',
+                            item.message
+                        );
+                    });
+                } else {
+                    this.appendWelcomeMessage();
+                }
+
+                this.state.historyLoaded = true;
+
+            } catch (error) {
+                console.error('ChatAgent history load failed:', error);
+
+                messages.innerHTML = '';
+
+                this.appendWelcomeMessage();
+
+                this.state.historyLoaded = true;
+            }
+        },
+        async fetchConversationHistory() {
+            const visitorId = this.getVisitorId();
+
+            const url =
+                this.config.server +
+                '/api/chat/history?visitor_id=' +
+                encodeURIComponent(visitorId) +
+                '&limit=50';
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-EMBED-TOKEN': this.config.token
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Conversation history request failed with status ' + response.status);
+            }
+
+            return response.json();
+        },
+        appendWelcomeMessage() {
+                    this.appendMessage(
+                        'ai',
+                        'Hello 👋 How can I help you today?'
+                    );
+                },
+                appendSystemMessage(text) {
+            const messages = document.getElementById('chat-messages');
+
+            if (!messages) {
+                return;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'chat-system-message';
+            div.innerText = text;
+
+            messages.appendChild(div);
+
+            this.scrollMessagesToBottom();
+        },
     };
 
     window.ChatAgent = ChatAgent;
