@@ -113,22 +113,35 @@
                             Color Theme
                         </label>
 
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                             @foreach($themes as $themeKey => $theme)
-                                <label class="border rounded p-3 cursor-pointer flex items-center gap-3">
+                                <label
+                                    class="relative border rounded-xl p-3 cursor-pointer hover:border-gray-400 transition"
+                                >
                                     <input
                                         type="radio"
                                         name="chatbot_theme"
                                         value="{{ $themeKey }}"
+                                        class="absolute top-3 right-3"
                                         @checked(old('chatbot_theme', config('chatbot.default_theme')) === $themeKey)
                                     >
 
-                                    <span
-                                        class="inline-block w-6 h-6 rounded-full"
-                                        style="background: {{ $theme['primary'] }}"
-                                    ></span>
+                                    <div class="flex items-center gap-2">
+                                        <span
+                                            class="inline-block w-8 h-8 rounded-full border"
+                                            style="background: {{ $theme['primary'] }}"
+                                        ></span>
 
-                                    <span>{{ $theme['label'] }}</span>
+                                        <div>
+                                            <div class="font-semibold text-sm">
+                                                {{ $theme['label'] }}
+                                            </div>
+
+                                            <div class="text-xs text-gray-500">
+                                                {{ $theme['primary'] }}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </label>
                             @endforeach
                         </div>
