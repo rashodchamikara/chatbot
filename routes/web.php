@@ -9,6 +9,8 @@ use App\Http\Controllers\Admin\LeadController;
 use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\WebsiteController as AdminWebsiteController;
 use App\Http\Controllers\Admin\KnowledgePageController;
+use App\Http\Controllers\Admin\AgentPresenceController;
+use App\Http\Controllers\Admin\LiveChatController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -87,6 +89,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/admin/knowledge-pages/{knowledgePage}/toggle-active', [KnowledgePageController::class, 'toggleActive'])
         ->name('admin.knowledge.toggleActive');
+    Route::post('/agent/online', [AgentPresenceController::class, 'online'])
+    ->name('agent.online');
+    Route::post('/agent/offline', [AgentPresenceController::class, 'offline'])
+    ->name('agent.offline');
+
+    Route::get('/live-chat', [LiveChatController::class, 'index'])
+        ->name('live-chat.index');
+
+    Route::get('/live-chat/{conversation}', [LiveChatController::class, 'show'])
+        ->name('live-chat.show');
+
+    Route::post('/live-chat/{conversation}/take', [LiveChatController::class, 'take'])
+        ->name('live-chat.take');
+
+    Route::post('/live-chat/{conversation}/message', [LiveChatController::class, 'sendMessage'])
+        ->name('live-chat.message');
+
+    Route::post('/live-chat/{conversation}/close', [LiveChatController::class, 'close'])
+        ->name('live-chat.close');
 
 });
 

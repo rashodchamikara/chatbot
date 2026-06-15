@@ -18,9 +18,16 @@
         state: {
             isOpen: false,
             isSending: false,
-            isReady: false
+            isReady: false,
+            historyLoaded: false,
+            liveAgentAvailable: false,
+            liveMode: false,
+            pusherReady: false
         },
-
+        pusher: null,
+        websiteChannel: null,
+        conversationChannel: null,
+        conversationChannelName: null,
         async init(options) {
             this.config = {
                 server: '',
@@ -39,6 +46,8 @@
             await this.loadWidgetConfig();
 
             this.createWidget();
+
+            await this.initRealtime();
 
             this.state.isReady = true;
         },
@@ -79,12 +88,15 @@
                 this.widgetConfig = {
                     chatbot_name: data.chatbot_name || 'AI Assistant',
                     avatar_url: data.avatar_url || null,
+                    live_agent_available: !!data.live_agent_available,
+                    realtime: data.realtime || null,
                     theme: {
                         primary: data.theme?.primary || '#2563eb',
                         secondary: data.theme?.secondary || '#eff6ff',
                         text: data.theme?.text || '#ffffff'
                     }
                 };
+                this.state.liveAgentAvailable = !!data.live_agent_available;
 
             } catch (error) {
                 console.error('ChatAgent config load failed:', error);
@@ -140,7 +152,11 @@
                             <span></span>
                         </div>
                     </div>
-
+                    <div id="chat-live-agent-bar" style="display: none;">
+                        <button id="chat-live-agent-button" type="button">
+                            Talk to a live agent
+                        </button>
+                    </div>
                     <div id="chat-input-wrapper">
                         <input
                             id="chat-input"
@@ -211,6 +227,13 @@
                     await this.handleSend();
                 }
             });
+            const liveButton = document.getElementById('chat-live-agent-button');
+
+            if (liveButton) {
+                liveButton.addEventListener('click', async () => {
+                    await this.requestLiveAgent();
+                });
+            }
         },
 
         applyTheme() {
@@ -286,14 +309,24 @@
             this.showTyping(true);
 
             try {
-                const response = await this.sendMessage(message);
+            const response = await this.sendMessage(message);
 
-                this.showTyping(false);
+                if (response.conversation_channel) {
+                    this.subscribeConversationChannel(response.conversation_channel);
+                }
 
-                this.appendMessage(
-                    'ai',
-                    response.reply || 'Sorry, I could not generate a response right now.'
-                );
+                if (response.mode === 'live' || response.mode === 'live_waiting') {
+                    this.state.liveMode = true;
+                    this.updateLiveAgentBar();
+                    return;
+                }
+
+                if (response.reply) {
+                    this.appendMessage(
+                        'ai',
+                        response.reply || 'Sorry, I could not generate a response right now.'
+                    );
+                }
 
             } catch (error) {
                 console.error('ChatAgent message failed:', error);
@@ -466,7 +499,13 @@
             messages.innerHTML = '';
 
             this.appendSystemMessage('Loading conversation...');
+            if (response.conversation_channel) {
+                this.subscribeConversationChannel(response.conversation_channel);
+            }
 
+            this.state.liveMode = ['live_waiting', 'live'].includes(response.mode);
+
+            this.updateLiveAgentBar();
             try {
                 const response = await this.fetchConversationHistory();
 
@@ -524,7 +563,7 @@
                         'Hello 👋 How can I help you today?'
                     );
                 },
-                appendSystemMessage(text) {
+        appendSystemMessage(text) {
             const messages = document.getElementById('chat-messages');
 
             if (!messages) {
@@ -539,6 +578,174 @@
 
             this.scrollMessagesToBottom();
         },
+        async loadPusherClient() {
+            if (window.Pusher) {
+                return;
+            }
+
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://js.pusher.com/8.4.0/pusher.min.js';
+                script.async = true;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        },
+
+        async initRealtime() {
+            if (!this.widgetConfig.realtime || !this.widgetConfig.realtime.enabled) {
+                return;
+            }
+
+            try {
+                await this.loadPusherClient();
+
+                const realtime = this.widgetConfig.realtime;
+
+                this.pusher = new Pusher(realtime.key, {
+                    wsHost: realtime.host,
+                    wsPort: realtime.port,
+                    wssPort: realtime.port,
+                    forceTLS: realtime.scheme === 'https',
+                    enabledTransports: ['ws', 'wss'],
+                    disableStats: true,
+                    cluster: 'mt1'
+                });
+
+                this.state.pusherReady = true;
+
+                this.subscribeWebsiteChannel();
+
+            } catch (error) {
+                console.error('Realtime initialization failed:', error);
+            }
+        },
+
+        subscribeWebsiteChannel() {
+            if (!this.pusher || !this.widgetConfig.realtime?.website_channel) {
+                return;
+            }
+
+            this.websiteChannel = this.pusher.subscribe(this.widgetConfig.realtime.website_channel);
+
+            this.websiteChannel.bind('agent.status.changed', (event) => {
+                this.state.liveAgentAvailable = !!event.available;
+                this.updateLiveAgentBar();
+            });
+        },
+
+        subscribeConversationChannel(channelName) {
+            if (!this.pusher || !channelName) {
+                return;
+            }
+
+            if (this.conversationChannelName === channelName) {
+                return;
+            }
+
+            if (this.conversationChannelName) {
+                this.pusher.unsubscribe(this.conversationChannelName);
+            }
+
+            this.conversationChannelName = channelName;
+
+            this.conversationChannel = this.pusher.subscribe(channelName);
+
+            this.conversationChannel.bind('conversation.message.created', (event) => {
+                if (event.sender === 'visitor') {
+                    return;
+                }
+
+                this.appendMessage(
+                    event.sender === 'agent' ? 'ai' : 'ai',
+                    event.message
+                );
+            });
+
+            this.conversationChannel.bind('conversation.mode.changed', (event) => {
+                this.state.liveMode = ['live_waiting', 'live'].includes(event.mode);
+
+                if (event.mode === 'live') {
+                    this.appendMessage(
+                        'ai',
+                        event.assigned_agent_name
+                            ? `${event.assigned_agent_name} joined the chat.`
+                            : 'A live agent joined the chat.'
+                    );
+                }
+
+                if (event.mode === 'ai') {
+                    this.appendMessage(
+                        'ai',
+                        'Live chat ended. The AI assistant is now active again.'
+                    );
+                }
+
+                this.updateLiveAgentBar();
+            });
+        },
+        updateLiveAgentBar() {
+            const bar = document.getElementById('chat-live-agent-bar');
+
+            if (!bar) {
+                return;
+            }
+
+            if (this.state.liveAgentAvailable && !this.state.liveMode) {
+                bar.style.display = 'block';
+            } else {
+                bar.style.display = 'none';
+            }
+        },
+
+        async requestLiveAgent() {
+            try {
+                const response = await fetch(this.config.server + '/api/live/request', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-EMBED-TOKEN': this.config.token
+                    },
+                    body: JSON.stringify({
+                        visitor_id: this.getVisitorId()
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    this.appendMessage(
+                        'ai',
+                        data.message || 'No live agent is currently available.'
+                    );
+                    return;
+                }
+
+                this.state.liveMode = true;
+
+                if (data.conversation_channel) {
+                    this.subscribeConversationChannel(data.conversation_channel);
+                }
+
+                this.updateLiveAgentBar();
+
+                this.appendMessage(
+                    'ai',
+                    data.message || 'A live agent has been notified.'
+                );
+
+            } catch (error) {
+                console.error('Live agent request failed:', error);
+
+                this.appendMessage(
+                    'ai',
+                    'Sorry, I could not connect you to a live agent right now.'
+                );
+            }
+        },
+
     };
 
     window.ChatAgent = ChatAgent;

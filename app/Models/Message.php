@@ -11,9 +11,14 @@ class Message extends Model
 
     protected $fillable = [
         'conversation_id',
+        'user_id',
         'sender',
         'message',
-        'tokens_used'
+        'tokens_used',
+        'is_system',
+    ];
+    protected $casts = [
+        'is_system' => 'boolean',
     ];
 
     public function conversation()
@@ -21,4 +26,8 @@ class Message extends Model
         return $this->belongsTo(Conversation::class);
     }
 
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

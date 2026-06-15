@@ -60,4 +60,12 @@ return [
     ],
 
     'default_theme' => 'blue',
+
+    'realtime' => [
+        'key' => env('REVERB_APP_KEY'),
+        'host' => env('REVERB_HOST', 'chat.tetris.lk'),
+        'port' => (int) env('REVERB_PORT', 443),
+        'scheme' => env('REVERB_SCHEME', 'https'),
+    ],
 ];
+
