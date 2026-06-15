@@ -25,6 +25,8 @@ class Website extends Model
         'indexing_started_at',
         'indexing_completed_at',
         'indexing_error',
+        'realtime_token',
+        'live_chat_enabled',
     ];
 
     protected $casts = [
@@ -32,6 +34,7 @@ class Website extends Model
         'is_active' => 'boolean',
         'indexing_started_at' => 'datetime',
         'indexing_completed_at' => 'datetime',
+        'live_chat_enabled' => 'boolean',
     ];
 
     public function tenant()
@@ -55,5 +58,13 @@ class Website extends Model
     public function leads()
     {
         return $this->hasMany(Lead::class);
+    }
+    protected static function booted(): void
+    {
+        static::creating(function ($website) {
+            if (!$website->realtime_token) {
+                $website->realtime_token = Str::random(64);
+            }
+        });
     }
 }

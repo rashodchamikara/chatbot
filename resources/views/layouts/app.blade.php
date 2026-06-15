@@ -32,5 +32,35 @@
                 {{ $slot }}
             </main>
         </div>
+        @auth
+        <script>
+        (function () {
+            async function goOnline() {
+                try {
+                    await fetch("{{ route('admin.agent.online') }}", {
+                        method: "POST",
+                        headers: {
+                            "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                            "Accept": "application/json"
+                        }
+                    });
+                } catch (e) {}
+            }
+
+            function goOffline() {
+                const data = new FormData();
+                data.append("_token", "{{ csrf_token() }}");
+
+                if (navigator.sendBeacon) {
+                    navigator.sendBeacon("{{ route('admin.agent.offline') }}", data);
+                }
+            }
+
+            goOnline();
+
+            window.addEventListener("beforeunload", goOffline);
+        })();
+        </script>
+    @endauth
     </body>
 </html>

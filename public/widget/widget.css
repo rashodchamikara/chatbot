@@ -475,3 +475,26 @@
     line-height: 1.4;
     text-align: center;
 }
+#chat-live-agent-bar {
+    padding: 10px 14px;
+    background: #ffffff;
+    border-top: 1px solid var(--chat-border);
+}
+
+#chat-live-agent-button {
+    width: 100%;
+    border: 1px solid var(--chat-primary);
+    background: var(--chat-secondary);
+    color: var(--chat-primary);
+    border-radius: 999px;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 160ms ease;
+}
+
+#chat-live-agent-button:hover {
+    background: var(--chat-primary);
+    color: var(--chat-primary-text);
+}
