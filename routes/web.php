@@ -89,10 +89,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/admin/knowledge-pages/{knowledgePage}/toggle-active', [KnowledgePageController::class, 'toggleActive'])
         ->name('admin.knowledge.toggleActive');
-    Route::post('/agent/online', [AgentPresenceController::class, 'online'])
-    ->name('agent.online');
-    Route::post('/agent/offline', [AgentPresenceController::class, 'offline'])
-    ->name('agent.offline');
+    Route::post('/admin/agent/online', [AgentPresenceController::class, 'online'])
+    ->name('admin.agent.online');
+
+    Route::post('/admin/agent/offline', [AgentPresenceController::class, 'offline'])
+    ->name('admin.agent.offline');
 
     Route::get('/live-chat', [LiveChatController::class, 'index'])
         ->name('live-chat.index');
