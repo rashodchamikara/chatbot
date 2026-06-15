@@ -309,7 +309,7 @@
             this.showTyping(true);
 
             try {
-            const response = await this.sendMessage(message);
+                const response = await this.sendMessage(message);
 
                 if (response.conversation_channel) {
                     this.subscribeConversationChannel(response.conversation_channel);
@@ -318,6 +318,11 @@
                 if (response.mode === 'live' || response.mode === 'live_waiting') {
                     this.state.liveMode = true;
                     this.updateLiveAgentBar();
+
+                    if (response.reply) {
+                        this.appendMessage('ai', response.reply);
+                    }
+
                     return;
                 }
 
@@ -331,22 +336,15 @@
             } catch (error) {
                 console.error('ChatAgent message failed:', error);
 
-                this.showTyping(false);
-
                 this.appendMessage(
                     'ai',
                     'Sorry, I had trouble processing that message. Please try again in a moment.'
                 );
 
             } finally {
+                this.showTyping(false);
                 this.setSendingState(false);
             }
-        },
-        state: {
-            isOpen: false,
-            isSending: false,
-            isReady: false,
-            historyLoaded: false
         },
 
         setSendingState(isSending) {
@@ -497,19 +495,22 @@
             }
 
             messages.innerHTML = '';
-
             this.appendSystemMessage('Loading conversation...');
-            if (response.conversation_channel) {
-                this.subscribeConversationChannel(response.conversation_channel);
-            }
 
-            this.state.liveMode = ['live_waiting', 'live'].includes(response.mode);
-
-            this.updateLiveAgentBar();
             try {
                 const response = await this.fetchConversationHistory();
 
                 messages.innerHTML = '';
+
+                if (response.conversation_channel) {
+                    this.subscribeConversationChannel(response.conversation_channel);
+                }
+
+                if (response.mode) {
+                    this.state.liveMode = ['live_waiting', 'live'].includes(response.mode);
+                }
+
+                this.updateLiveAgentBar();
 
                 if (response.messages && response.messages.length > 0) {
                     response.messages.forEach((item) => {
@@ -528,7 +529,6 @@
                 console.error('ChatAgent history load failed:', error);
 
                 messages.innerHTML = '';
-
                 this.appendWelcomeMessage();
 
                 this.state.historyLoaded = true;
