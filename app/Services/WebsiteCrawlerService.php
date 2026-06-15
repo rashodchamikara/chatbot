@@ -11,7 +11,7 @@ use DOMXPath;
 
 class WebsiteCrawlerService
 {
-    public function crawlWebsite(Website $website,  int $limit = 100): array
+    public function crawlWebsite(Website $website, int $limit = 100): array
     {
         $startUrl = rtrim($website->domain, '/');
 
@@ -22,12 +22,27 @@ class WebsiteCrawlerService
         $visited = [];
         $queue = [$startUrl];
 
+        \Log::info('Crawler started', [
+            'website_id' => $website->id,
+            'domain' => $website->domain,
+            'start_url' => $startUrl,
+            'limit' => $limit,
+        ]);
+
         while (!empty($queue)) {
             if (count($visited) >= $limit) {
                 break;
             }
+
             $url = array_shift($queue);
-            if ($this->shouldCrawlUrl($url)) {
+            $url = rtrim($url, '/');
+
+            if (!$this->shouldCrawlUrl($url)) {
+                \Log::info('Crawler skipped URL by filter', [
+                    'website_id' => $website->id,
+                    'url' => $url,
+                ]);
+
                 continue;
             }
 
@@ -37,39 +52,63 @@ class WebsiteCrawlerService
 
             $visited[$url] = true;
 
+            \Log::info('Crawler visiting URL', [
+                'website_id' => $website->id,
+                'url' => $url,
+            ]);
+
             try {
                 $response = Http::timeout(25)
-                ->withHeaders([
-                    'User-Agent' => 'ChatBotIndexer/1.0',
-                    'Accept' => 'text/html,application/xhtml+xml',
-                ])
-                ->get($url);
+                    ->connectTimeout(10)
+                    ->withHeaders([
+                        'User-Agent' => 'Mozilla/5.0 ChatBotIndexer/1.0',
+                        'Accept' => 'text/html,application/xhtml+xml',
+                    ])
+                    ->get($url);
 
-            if (!$response->successful()) {
-                continue;
-            }
+                if (!$response->successful()) {
+                    \Log::warning('Crawler request failed', [
+                        'website_id' => $website->id,
+                        'url' => $url,
+                        'status' => $response->status(),
+                    ]);
 
-            $contentType = strtolower($response->header('Content-Type', ''));
+                    continue;
+                }
 
-            if (
-                !str_contains($contentType, 'text/html') &&
-                !str_contains($contentType, 'application/xhtml+xml')
-            ) {
-                \Log::info('Skipping non-HTML URL during crawl', [
-                    'url' => $url,
-                    'content_type' => $contentType,
-                ]);
+                $contentType = strtolower($response->header('Content-Type', ''));
+                $bodyStart = strtolower(substr(ltrim($response->body()), 0, 500));
 
-                continue;
-            }
+                $isHtml =
+                    str_contains($contentType, 'text/html') ||
+                    str_contains($contentType, 'application/xhtml+xml') ||
+                    str_contains($bodyStart, '<!doctype html') ||
+                    str_contains($bodyStart, '<html');
 
-            $html = $response->body();
+                if (!$isHtml) {
+                    \Log::info('Skipping non-HTML URL during crawl', [
+                        'website_id' => $website->id,
+                        'url' => $url,
+                        'content_type' => $contentType,
+                        'body_start' => substr($response->body(), 0, 100),
+                    ]);
 
-            if (!mb_check_encoding($html, 'UTF-8')) {
-                $html = mb_convert_encoding($html, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
-            }
+                    continue;
+                }
+
+                $html = $response->body();
+
+                if (!mb_check_encoding($html, 'UTF-8')) {
+                    $html = mb_convert_encoding($html, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+                }
 
             } catch (\Throwable $e) {
+                \Log::warning('Crawler request exception', [
+                    'website_id' => $website->id,
+                    'url' => $url,
+                    'error' => $e->getMessage(),
+                ]);
+
                 continue;
             }
 
@@ -83,7 +122,7 @@ class WebsiteCrawlerService
                         'url' => $url,
                     ],
                     [
-                       'title' => $title,
+                        'title' => $title,
                         'type' => 'page',
                         'source_type' => 'crawler',
                         'content' => $content,
@@ -92,18 +131,51 @@ class WebsiteCrawlerService
                         'is_active' => true,
                     ]
                 );
+
+                \Log::info('Crawler saved knowledge page', [
+                    'website_id' => $website->id,
+                    'url' => $url,
+                    'content_length' => strlen($content),
+                ]);
+            } else {
+                \Log::info('Crawler skipped page because content is too short', [
+                    'website_id' => $website->id,
+                    'url' => $url,
+                    'content_length' => strlen($content),
+                ]);
             }
 
             foreach ($this->extractLinks($html, $startUrl) as $link) {
+                $link = rtrim($link, '/');
+
                 if (!isset($visited[$link]) && count($queue) < $limit) {
                     $queue[] = $link;
                 }
             }
         }
 
+        \Log::info('Crawler completed', [
+            'website_id' => $website->id,
+            'visited_count' => count($visited),
+            'saved_pages' => $website->knowledgePages()->count(),
+        ]);
+
         return array_keys($visited);
     }
+    private function normalizeHost(?string $host): ?string
+    {
+        if (!$host) {
+            return null;
+        }
 
+        $host = strtolower(trim($host));
+
+        if (str_starts_with($host, 'www.')) {
+            $host = substr($host, 4);
+        }
+
+        return $host;
+    }
     private function extractTitle(string $html): ?string
     {
         if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $html, $matches)) {
@@ -144,7 +216,11 @@ class WebsiteCrawlerService
 
             $absolute = $this->toAbsoluteUrl($href, $baseUrl);
 
-            if ($absolute && parse_url($absolute, PHP_URL_HOST) === parse_url($baseUrl, PHP_URL_HOST)) {
+            if (
+                $absolute &&
+                $this->normalizeHost(parse_url($absolute, PHP_URL_HOST)) ===
+                $this->normalizeHost(parse_url($baseUrl, PHP_URL_HOST))
+            ) {
                 $links[] = strtok($absolute, '#');
             }
         }
