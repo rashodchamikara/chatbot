@@ -41,12 +41,23 @@ class ConversationMessageCreated implements ShouldBroadcastNow
     {
         return [
             'id' => $this->message->id,
-            'conversation_id' => $this->message->conversation_id,
+            'conversation_id' =>
+                $this->message->conversation_id,
+
             'sender' => $this->message->sender,
+
             'message' => $this->message->message,
-            'is_system' => (bool) $this->message->is_system,
-            'agent_name' => $this->message->user?->name,
-            'created_at' => optional($this->message->created_at)->toDateTimeString(),
+
+            'is_system' =>
+                (bool) $this->message->is_system,
+
+            'agent_name' =>
+                $this->message->user?->name,
+
+            'created_at' =>
+                $this->message
+                    ->created_at
+                    ?->toISOString(),
         ];
     }
 }

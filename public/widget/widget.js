@@ -652,38 +652,54 @@
 
             this.conversationChannel = this.pusher.subscribe(channelName);
 
-            this.conversationChannel.bind('conversation.message.created', (event) => {
-                if (event.sender === 'visitor') {
-                    return;
+            this.conversationChannel.bind(
+                'conversation.message.created',
+                function (event) {
+                    if (event.sender === 'visitor') {
+                        return;
+                    }
+
+                    if (messageExists(event.id)) {
+                        return;
+                    }
+
+                    appendMessage({
+                        id: event.id,
+                        sender: event.sender,
+                        message: event.message,
+                        is_system: event.is_system,
+                        agent_name: event.agent_name,
+                        created_at: event.created_at
+                    });
                 }
+            );
 
-                this.appendMessage(
-                    event.sender === 'agent' ? 'ai' : 'ai',
-                    event.message
-                );
-            });
+            this.conversationChannel.bind(
+                'conversation.mode.changed',
+                function (event) {
+                    state.mode = event.mode;
 
-            this.conversationChannel.bind('conversation.mode.changed', (event) => {
-                this.state.liveMode = ['live_waiting', 'live'].includes(event.mode);
+                    if (event.mode === 'live_waiting') {
+                        showSystemStatus(
+                            'Waiting for a live agent...'
+                        );
+                    }
 
-                if (event.mode === 'live') {
-                    this.appendMessage(
-                        'ai',
-                        event.assigned_agent_name
-                            ? `${event.assigned_agent_name} joined the chat.`
-                            : 'A live agent joined the chat.'
-                    );
+                    if (event.mode === 'live') {
+                        showSystemStatus(
+                            event.assigned_agent_name
+                                ? `${event.assigned_agent_name} joined the chat.`
+                                : 'A live agent joined the chat.'
+                        );
+                    }
+
+                    if (event.mode === 'ai') {
+                        showSystemStatus(
+                            'Live chat ended. The AI assistant is active again.'
+                        );
+                    }
                 }
-
-                if (event.mode === 'ai') {
-                    this.appendMessage(
-                        'ai',
-                        'Live chat ended. The AI assistant is now active again.'
-                    );
-                }
-
-                this.updateLiveAgentBar();
-            });
+            );
         },
         updateLiveAgentBar() {
             const bar = document.getElementById('chat-live-agent-bar');

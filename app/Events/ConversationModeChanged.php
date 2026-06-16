@@ -1,32 +1,31 @@
 <?php
-
 namespace App\Events;
 
+use App\Models\Conversation;
 use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PresenceChannel;
-use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
-use App\Models\Conversation;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
-
 
 class ConversationModeChanged implements ShouldBroadcastNow
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable, SerializesModels;
 
     public function __construct(
         public Conversation $conversation
     ) {
-        $this->conversation->loadMissing('assignedAgent');
+        $this->conversation->loadMissing(
+            'assignedAgent'
+        );
     }
 
     public function broadcastOn(): array
     {
         return [
-            new Channel('conversation.' . $this->conversation->realtime_token),
+            new Channel(
+                'conversation.' .
+                $this->conversation->realtime_token
+            ),
         ];
     }
 
@@ -34,14 +33,38 @@ class ConversationModeChanged implements ShouldBroadcastNow
     {
         return 'conversation.mode.changed';
     }
-    
+
     public function broadcastWith(): array
     {
         return [
-            'conversation_id' => $this->conversation->id,
-            'mode' => $this->conversation->mode,
-            'assigned_agent_id' => $this->conversation->assigned_agent_id,
-            'assigned_agent_name' => $this->conversation->assignedAgent?->name,
+            'conversation_id' =>
+                $this->conversation->id,
+
+            'mode' =>
+                $this->conversation->mode,
+
+            'assigned_agent_id' =>
+                $this->conversation->assigned_agent_id,
+
+            'assigned_agent_name' =>
+                $this->conversation
+                    ->assignedAgent
+                    ?->name,
+
+            'live_requested_at' =>
+                $this->conversation
+                    ->live_requested_at
+                    ?->toISOString(),
+
+            'live_started_at' =>
+                $this->conversation
+                    ->live_started_at
+                    ?->toISOString(),
+
+            'live_ended_at' =>
+                $this->conversation
+                    ->live_ended_at
+                    ?->toISOString(),
         ];
     }
 }

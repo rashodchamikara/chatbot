@@ -42,7 +42,9 @@ class LiveAgentRequested implements ShouldBroadcastNow
             'website_name' => $this->conversation->website?->name,
             'mode' => $this->conversation->mode,
             'requested_at' => optional($this->conversation->live_requested_at)->toDateTimeString(),
-            'url' => route('admin.live-chat.show', $this->conversation),
+            'url' => route('admin.conversations.show', [
+                'conversation' => $this->conversation->id,
+            ]),
         ];
     }
 }

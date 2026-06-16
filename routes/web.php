@@ -10,7 +10,6 @@ use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\WebsiteController as AdminWebsiteController;
 use App\Http\Controllers\Admin\KnowledgePageController;
 use App\Http\Controllers\Admin\AgentPresenceController;
-use App\Http\Controllers\Admin\LiveChatController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -94,21 +93,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/admin/agent/offline', [AgentPresenceController::class, 'offline'])
     ->name('admin.agent.offline');
+    Route::get('/admin/conversations', [ConversationController::class, 'index'])
+    ->name('admin.conversations.index');
 
-    Route::get('/admin/live-chat', [LiveChatController::class, 'index'])
-        ->name('admin.live-chat.index');
+    Route::get('/admin/conversations/{conversation}', [ConversationController::class, 'show'])
+        ->name('admin.conversations.show');
 
-    Route::get('/admin/live-chat/{conversation}', [LiveChatController::class, 'show'])
-        ->name('admin.live-chat.show');
+    Route::post('/admin/conversations/{conversation}/take', [ConversationController::class, 'take'])
+        ->name('admin.conversations.take');
 
-    Route::post('/admin/live-chat/{conversation}/take', [LiveChatController::class, 'take'])
-        ->name('admin.live-chat.take');
+    Route::post('/admin/conversations/{conversation}/messages', [ConversationController::class, 'sendMessage'])
+        ->name('admin.conversations.messages.store');
 
-    Route::post('/admin/live-chat/{conversation}/message', [LiveChatController::class, 'sendMessage'])
-        ->name('admin.live-chat.message');
-
-    Route::post('/admin/live-chat/{conversation}/close', [LiveChatController::class, 'close'])
-        ->name('admin.live-chat.close');
+    Route::post('/admin/conversations/{conversation}/close-live-chat', [ConversationController::class, 'closeLiveChat'])
+        ->name('admin.conversations.closeLiveChat');
     
 
 });

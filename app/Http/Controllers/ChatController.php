@@ -85,12 +85,19 @@ class ChatController extends Controller
             $nextLeadQuestion
         );
 
-        Message::create([
+        $aiMessage = Message::create([
             'conversation_id' => $conversation->id,
             'sender' => 'ai',
+            'is_system' => false,
             'message' => $aiText,
         ]);
 
+        broadcast(
+            new \App\Events\ConversationMessageCreated(
+                $aiMessage
+            )
+        );
+        $conversation->touch();
         return response()->json([
             'reply' => $aiText,
             'conversation_id' => $conversation->id,
