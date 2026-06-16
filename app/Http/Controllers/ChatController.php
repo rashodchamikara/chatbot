@@ -2,47 +2,87 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Events\ConversationMessageCreated;
+use App\Events\ConversationModeChanged;
+use App\Events\LiveAgentRequested;
 use App\Models\Conversation;
 use App\Models\Message;
-use App\Services\SalesBrainService;
+use App\Services\AgentAvailabilityService;
 use App\Services\LeadCaptureService;
-
+use App\Services\SalesBrainService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ChatController extends Controller
 {
+
     public function message(
         Request $request,
         SalesBrainService $brain,
         LeadCaptureService $leadCaptureService
-    ) {
-        $request->validate([
-            'message' => 'required|string|max:5000',
-            'visitor_id' => 'required|string|max:255',
+    ): JsonResponse {
+        $validated = $request->validate([
+            'message' => [
+                'required',
+                'string',
+                'max:5000',
+            ],
+            'visitor_id' => [
+                'required',
+                'string',
+                'max:255',
+            ],
         ]);
 
-        $website = $request->website;
+        $website = $this->resolveWebsite($request);
+
+        if (!$website) {
+            return response()->json([
+                'message' =>
+                    'Website could not be resolved from the embed token.',
+            ], 404);
+        }
 
         $conversation = Conversation::firstOrCreate(
             [
                 'website_id' => $website->id,
-                'visitor_id' => $request->visitor_id,
+                'visitor_id' => $validated['visitor_id'],
             ],
             [
                 'status' => 'active',
+                'mode' => 'ai',
                 'lead_stage' => 'discovery',
             ]
         );
 
-        $history = Message::where('conversation_id', $conversation->id)
-            ->latest()
-            ->take(10)
+  
+        if (!$conversation->mode) {
+            $conversation->forceFill([
+                'mode' => 'ai',
+            ])->save();
+        }
+
+
+        $history = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('is_system', false)
+            ->whereIn('sender', [
+                'visitor',
+                'ai',
+                'agent',
+            ])
+            ->latest('id')
+            ->limit(10)
             ->get()
             ->reverse()
-            ->map(function ($msg) {
+            ->map(function (Message $message): array {
                 return [
-                    'role' => $msg->sender === 'visitor' ? 'user' : 'assistant',
-                    'content' => $msg->message,
+                    'role' => $message->sender === 'visitor'
+                        ? 'user'
+                        : 'assistant',
+
+                    'content' => $message->message,
                 ];
             })
             ->values()
@@ -50,34 +90,63 @@ class ChatController extends Controller
 
         $visitorMessage = Message::create([
             'conversation_id' => $conversation->id,
+            'user_id' => null,
             'sender' => 'visitor',
-            'message' => $request->message,
+            'is_system' => false,
+            'message' => trim($validated['message']),
         ]);
 
-        broadcast(new \App\Events\ConversationMessageCreated($visitorMessage));
+        $conversation->touch();
 
-        if (in_array($conversation->mode, ['live_waiting', 'live'])) {
+        broadcast(
+            new ConversationMessageCreated($visitorMessage)
+        );
+
+ 
+        $conversation->refresh();
+
+
+        if (
+            in_array(
+                $conversation->mode,
+                ['live_waiting', 'live'],
+                true
+            )
+        ) {
             return response()->json([
+                'success' => true,
                 'reply' => null,
+                'reply_message' => null,
                 'mode' => $conversation->mode,
                 'conversation_id' => $conversation->id,
-                'conversation_channel' => 'conversation.' . $conversation->realtime_token,
-                'message' => 'Message sent to live agent.',
+                'conversation_channel' =>
+                    $this->conversationChannel($conversation),
+
+                'message' =>
+                    $conversation->mode === 'live'
+                        ? 'Message sent to the live agent.'
+                        : 'Message sent. Please wait for a live agent.',
             ]);
         }
 
+ 
         $leadResult = $leadCaptureService->processMessage(
             $website,
             $conversation,
-            $request->message
+            $validated['message']
         );
 
-        $lead = $leadResult['lead'];
-        $leadStage = $leadResult['lead_stage'];
-        $nextLeadQuestion = $leadResult['next_question'];
+        $lead = $leadResult['lead'] ?? null;
+
+        $leadStage = $leadResult['lead_stage']
+            ?? $conversation->lead_stage
+            ?? 'discovery';
+
+        $nextLeadQuestion = $leadResult['next_question']
+            ?? null;
 
         $aiText = $brain->analyze(
-            $request->message,
+            $validated['message'],
             $website,
             $history,
             $lead,
@@ -85,48 +154,87 @@ class ChatController extends Controller
             $nextLeadQuestion
         );
 
+        $aiText = trim((string) $aiText);
+
+        if ($aiText === '') {
+            $aiText =
+                'Sorry, I could not generate a response right now.';
+        }
+
         $aiMessage = Message::create([
             'conversation_id' => $conversation->id,
+            'user_id' => null,
             'sender' => 'ai',
             'is_system' => false,
             'message' => $aiText,
         ]);
 
-        broadcast(
-            new \App\Events\ConversationMessageCreated(
-                $aiMessage
-            )
-        );
         $conversation->touch();
+
+ 
+        broadcast(
+            new ConversationMessageCreated($aiMessage)
+        );
+
+ 
         return response()->json([
-            'reply' => $aiText,
+            'success' => true,
+
+            
+            'reply' => $aiMessage->message,
+
+            'reply_message' =>
+                $this->formatMessage($aiMessage),
+
+            'mode' => $conversation->mode ?: 'ai',
+
             'conversation_id' => $conversation->id,
-            'lead' => $lead ? [
-                'id' => $lead->id,
-                'name' => $lead->name,
-                'email' => $lead->email,
-                'phone' => $lead->phone,
-                'country' => $lead->country,
-                'preferred_contact_time' => $lead->preferred_contact_time,
-                'product_interest' => $lead->product_interest,
-                'lead_score' => $lead->lead_score,
-                'status' => $lead->status,
-            ] : null,
+
+            'conversation_channel' =>
+                $this->conversationChannel($conversation),
+
+            'lead' => $lead
+                ? [
+                    'id' => $lead->id,
+                    'name' => $lead->name,
+                    'email' => $lead->email,
+                    'phone' => $lead->phone,
+                    'country' => $lead->country,
+                    'preferred_contact_time' =>
+                        $lead->preferred_contact_time,
+
+                    'product_interest' =>
+                        $lead->product_interest,
+
+                    'lead_score' => $lead->lead_score,
+                    'status' => $lead->status,
+                ]
+                : null,
+
             'lead_stage' => $leadStage,
         ]);
     }
-    public function config(Request $request, \App\Services\AgentAvailabilityService $agentAvailability)
-    {
-        $website = $request->website ?? $request->attributes->get('website');
+
+  
+    public function config(
+        Request $request,
+        AgentAvailabilityService $agentAvailability
+    ): JsonResponse {
+        $website = $this->resolveWebsite($request);
 
         if (!$website) {
             return response()->json([
-                'message' => 'Website could not be resolved from embed token.',
+                'message' =>
+                    'Website could not be resolved from the embed token.',
             ], 404);
         }
 
         $themes = config('chatbot.themes', []);
-        $defaultThemeKey = config('chatbot.default_theme', 'blue');
+
+        $defaultThemeKey = config(
+            'chatbot.default_theme',
+            'blue'
+        );
 
         $fallbackTheme = [
             'label' => 'Blue',
@@ -135,60 +243,114 @@ class ChatController extends Controller
             'text' => '#ffffff',
         ];
 
-        $themeKey = $website->chatbot_theme ?: $defaultThemeKey;
+        $themeKey = $website->chatbot_theme
+            ?: $defaultThemeKey;
 
         $theme = $themes[$themeKey]
             ?? $themes[$defaultThemeKey]
             ?? $fallbackTheme;
 
+        $realtimeKey = config('chatbot.realtime.key');
+        $realtimeHost = config('chatbot.realtime.host');
+
         return response()->json([
             'website_id' => $website->id,
 
-            'chatbot_name' => $website->chatbot_name
+            'chatbot_name' =>
+                $website->chatbot_name
                 ?: $website->name . ' Assistant',
 
             'theme' => [
                 'key' => $themeKey,
-                'primary' => $theme['primary'] ?? $fallbackTheme['primary'],
-                'secondary' => $theme['secondary'] ?? $fallbackTheme['secondary'],
-                'text' => $theme['text'] ?? $fallbackTheme['text'],
+
+                'primary' =>
+                    $theme['primary']
+                    ?? $fallbackTheme['primary'],
+
+                'secondary' =>
+                    $theme['secondary']
+                    ?? $fallbackTheme['secondary'],
+
+                'text' =>
+                    $theme['text']
+                    ?? $fallbackTheme['text'],
             ],
 
             'avatar_url' => $website->chatbot_avatar
-                ? asset('storage/' . $website->chatbot_avatar)
+                ? asset(
+                    'storage/' .
+                    ltrim($website->chatbot_avatar, '/')
+                )
                 : null,
 
-            'live_agent_available' => $agentAvailability->hasOnlineAgent($website),
+            'live_agent_available' =>
+                $agentAvailability->hasOnlineAgent($website),
 
             'realtime' => [
-                'enabled' => true,
-                'key' => config('chatbot.realtime.key'),
-                'host' => config('chatbot.realtime.host'),
-                'port' => config('chatbot.realtime.port'),
-                'scheme' => config('chatbot.realtime.scheme'),
-                'website_channel' => 'website.' . $website->realtime_token,
+                'enabled' =>
+                    filled($realtimeKey) &&
+                    filled($realtimeHost) &&
+                    filled($website->realtime_token),
+
+                'key' => $realtimeKey,
+                'host' => $realtimeHost,
+
+                'port' => (int) config(
+                    'chatbot.realtime.port',
+                    443
+                ),
+
+                'scheme' => config(
+                    'chatbot.realtime.scheme',
+                    'https'
+                ),
+
+                'website_channel' =>
+                    filled($website->realtime_token)
+                        ? 'website.' .
+                            $website->realtime_token
+                        : null,
             ],
         ]);
     }
-    public function history(Request $request)
+
+  
+    public function history(Request $request): JsonResponse
     {
-        $request->validate([
-            'visitor_id' => ['required', 'string', 'max:255'],
-            'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+        $validated = $request->validate([
+            'visitor_id' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+            'limit' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:100',
+            ],
         ]);
 
-        $website = $request->website ?? $request->attributes->get('website');
+        $website = $this->resolveWebsite($request);
 
         if (!$website) {
             return response()->json([
-                'message' => 'Website could not be resolved from embed token.',
+                'message' =>
+                    'Website could not be resolved from the embed token.',
             ], 404);
         }
 
-        $limit = (int) $request->input('limit', 50);
+        $limit = (int) (
+            $validated['limit']
+            ?? 50
+        );
 
-        $conversation = \App\Models\Conversation::where('website_id', $website->id)
-            ->where('visitor_id', $request->visitor_id)
+        $conversation = Conversation::query()
+            ->where('website_id', $website->id)
+            ->where(
+                'visitor_id',
+                $validated['visitor_id']
+            )
             ->first();
 
         if (!$conversation) {
@@ -200,86 +362,231 @@ class ChatController extends Controller
             ]);
         }
 
-        $messages = $conversation->messages()
+        $messages = $conversation
+            ->messages()
+            ->with('user')
             ->latest('id')
             ->limit($limit)
             ->get()
             ->sortBy('id')
             ->values()
-            ->map(function ($message) {
-                return [
-                    'id' => $message->id,
-                    'sender' => $message->sender,
-                    'message' => $message->message,
-                    'is_system' => (bool) $message->is_system,
-                    'created_at' => optional($message->created_at)->toDateTimeString(),
-                ];
+            ->map(function (Message $message): array {
+                return $this->formatMessage($message);
             });
 
         return response()->json([
             'conversation_id' => $conversation->id,
-            'conversation_channel' => 'conversation.' . $conversation->realtime_token,
-            'mode' => $conversation->mode,
+
+            'conversation_channel' =>
+                $this->conversationChannel($conversation),
+
+            'mode' => $conversation->mode ?: 'ai',
+
             'messages' => $messages,
         ]);
     }
+
+ 
     public function requestLiveAgent(
         Request $request,
-        \App\Services\AgentAvailabilityService $agentAvailability
-    ) {
-        $request->validate([
-            'visitor_id' => ['required', 'string', 'max:255'],
+        AgentAvailabilityService $agentAvailability
+    ): JsonResponse {
+        $validated = $request->validate([
+            'visitor_id' => [
+                'required',
+                'string',
+                'max:255',
+            ],
         ]);
 
-        $website = $request->website ?? $request->attributes->get('website');
+        $website = $this->resolveWebsite($request);
 
         if (!$website) {
             return response()->json([
-                'message' => 'Website could not be resolved.',
+                'message' =>
+                    'Website could not be resolved.',
             ], 404);
         }
 
-        if (!$agentAvailability->hasOnlineAgent($website)) {
+        if (
+            !$agentAvailability->hasOnlineAgent(
+                $website
+            )
+        ) {
             return response()->json([
-                'message' => 'No live agent is currently available.',
+                'message' =>
+                    'No live agent is currently available.',
+
                 'available' => false,
             ], 409);
         }
 
-        $conversation = \App\Models\Conversation::firstOrCreate(
-            [
-                'website_id' => $website->id,
-                'visitor_id' => $request->visitor_id,
-            ],
-            [
-                'status' => 'active',
-                'mode' => 'ai',
-                'lead_stage' => 'discovery',
-            ]
-        );
+        $result = DB::transaction(function () use (
+            $website,
+            $validated
+        ): array {
+            $conversation = Conversation::query()
+                ->firstOrCreate(
+                    [
+                        'website_id' => $website->id,
 
-        $conversation->update([
-            'mode' => 'live_waiting',
-            'live_requested_at' => now(),
-            'live_ended_at' => null,
-        ]);
+                        'visitor_id' =>
+                            $validated['visitor_id'],
+                    ],
+                    [
+                        'status' => 'active',
+                        'mode' => 'ai',
+                        'lead_stage' => 'discovery',
+                    ]
+                );
 
-        $message = \App\Models\Message::create([
-            'conversation_id' => $conversation->id,
-            'sender' => 'system',
-            'is_system' => true,
-            'message' => 'Visitor requested a live agent.',
-        ]);
+            $conversation = Conversation::query()
+                ->lockForUpdate()
+                ->findOrFail($conversation->id);
 
-        broadcast(new \App\Events\ConversationMessageCreated($message));
-        broadcast(new \App\Events\ConversationModeChanged($conversation->fresh()));
-        broadcast(new \App\Events\LiveAgentRequested($conversation->fresh()));
+            if ($conversation->mode === 'live') {
+                return [
+                    'conversation' => $conversation,
+                    'message' => null,
+                    'already_requested' => true,
+                    'response_message' =>
+                        'A live agent is already handling this conversation.',
+                ];
+            }
+
+            if (
+                $conversation->mode ===
+                'live_waiting'
+            ) {
+                return [
+                    'conversation' => $conversation,
+                    'message' => null,
+                    'already_requested' => true,
+                    'response_message' =>
+                        'A live agent has already been notified. Please wait a moment.',
+                ];
+            }
+
+            $conversation->update([
+                'mode' => 'live_waiting',
+                'assigned_agent_id' => null,
+                'live_requested_at' => now(),
+                'live_started_at' => null,
+                'live_ended_at' => null,
+            ]);
+
+            $systemMessage = Message::create([
+                'conversation_id' =>
+                    $conversation->id,
+
+                'user_id' => null,
+                'sender' => 'system',
+                'is_system' => true,
+
+                'message' =>
+                    'Visitor requested a live agent.',
+            ]);
+
+            return [
+                'conversation' =>
+                    $conversation->fresh(),
+
+                'message' => $systemMessage,
+
+                'already_requested' => false,
+
+                'response_message' =>
+                    'A live agent has been notified. Please wait a moment.',
+            ];
+        });
+
+        $conversation =
+            $result['conversation'];
+
+        if (!$result['already_requested']) {
+            broadcast(
+                new ConversationMessageCreated(
+                    $result['message']
+                )
+            );
+
+            broadcast(
+                new ConversationModeChanged(
+                    $conversation
+                )
+            );
+
+            broadcast(
+                new LiveAgentRequested(
+                    $conversation
+                )
+            );
+        }
 
         return response()->json([
-            'message' => 'A live agent has been notified. Please wait a moment.',
-            'conversation_id' => $conversation->id,
-            'conversation_channel' => 'conversation.' . $conversation->realtime_token,
-            'mode' => $conversation->mode,
+            'success' => true,
+
+            'message' =>
+                $result['response_message'],
+
+            'conversation_id' =>
+                $conversation->id,
+
+            'conversation_channel' =>
+                $this->conversationChannel(
+                    $conversation
+                ),
+
+            'mode' =>
+                $conversation->mode,
+
+            'already_requested' =>
+                $result['already_requested'],
         ]);
+    }
+
+    private function resolveWebsite(Request $request)
+    {
+        return $request->website
+            ?? $request->attributes->get('website');
+    }
+
+
+    private function conversationChannel(
+        Conversation $conversation
+    ): ?string {
+        if (!$conversation->realtime_token) {
+            return null;
+        }
+
+        return 'conversation.' .
+            $conversation->realtime_token;
+    }
+
+    private function formatMessage(
+        Message $message
+    ): array {
+        $message->loadMissing('user');
+
+        return [
+            'id' => $message->id,
+
+            'conversation_id' =>
+                $message->conversation_id,
+
+            'sender' => $message->sender,
+
+            'message' => $message->message,
+
+            'is_system' =>
+                (bool) $message->is_system,
+
+            'agent_name' =>
+                $message->user?->name,
+
+            'created_at' =>
+                $message->created_at
+                    ?->toISOString(),
+        ];
     }
 }

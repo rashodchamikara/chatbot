@@ -537,7 +537,16 @@
                     return;
                 }
 
-                if (response.reply) {
+                if (response.reply_message) {
+                    this.appendMessage(
+                        'ai',
+                        response.reply_message.message,
+                        response.reply_message.id
+                    );
+                } else if (response.reply) {
+                    /*
+                    * Backward compatibility for older API responses.
+                    */
                     this.appendMessage(
                         'ai',
                         response.reply
