@@ -32,11 +32,13 @@ class AgentPresenceController extends Controller
 
         $this->broadcastAvailabilityForUser($user, $availability);
 
+        $freshUser = $user->fresh();
+
         return response()->json([
-            'status' => $user->fresh()->agent_status,
-            'last_seen_at' => $user->fresh()
-                ->last_seen_at
-                ?->toDateTimeString(),
+            'status' => $freshUser->agent_status,
+            'last_seen_at' => $freshUser->last_seen_at
+                ? \Illuminate\Support\Carbon::parse($freshUser->last_seen_at)->toDateTimeString()
+                : null,
         ]);
     }
 
