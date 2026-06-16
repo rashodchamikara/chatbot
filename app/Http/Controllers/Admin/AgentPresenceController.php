@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Website;
 use App\Services\AgentAvailabilityService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class AgentPresenceController extends Controller
 {
