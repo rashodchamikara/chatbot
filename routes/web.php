@@ -95,20 +95,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/admin/agent/offline', [AgentPresenceController::class, 'offline'])
     ->name('admin.agent.offline');
 
-    Route::get('/live-chat', [LiveChatController::class, 'index'])
-        ->name('live-chat.index');
+    Route::get('/admin/live-chat', [LiveChatController::class, 'index'])
+        ->name('admin.live-chat.index');
 
-    Route::get('/live-chat/{conversation}', [LiveChatController::class, 'show'])
-        ->name('live-chat.show');
+    Route::get('/admin/live-chat/{conversation}', [LiveChatController::class, 'show'])
+        ->name('admin.live-chat.show');
 
-    Route::post('/live-chat/{conversation}/take', [LiveChatController::class, 'take'])
-        ->name('live-chat.take');
+    Route::post('/admin/live-chat/{conversation}/take', [LiveChatController::class, 'take'])
+        ->name('admin.live-chat.take');
 
-    Route::post('/live-chat/{conversation}/message', [LiveChatController::class, 'sendMessage'])
-        ->name('live-chat.message');
+    Route::post('/admin/live-chat/{conversation}/message', [LiveChatController::class, 'sendMessage'])
+        ->name('admin.live-chat.message');
 
-    Route::post('/live-chat/{conversation}/close', [LiveChatController::class, 'close'])
-        ->name('live-chat.close');
+    Route::post('/admin/live-chat/{conversation}/close', [LiveChatController::class, 'close'])
+        ->name('admin.live-chat.close');
+    
 
 });
 

@@ -13,6 +13,7 @@ class Message extends Model
         'conversation_id',
         'user_id',
         'sender',
+        'role',
         'message',
         'tokens_used',
         'is_system',
