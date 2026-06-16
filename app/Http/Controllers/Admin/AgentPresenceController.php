@@ -14,15 +14,28 @@ class AgentPresenceController extends Controller
     {
         $user = $request->user();
 
-        $user->update([
+        Log::warning('AGENT ONLINE endpoint called', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'route' => $request->route()?->getName(),
+            'url' => $request->fullUrl(),
+            'referer' => $request->header('referer'),
+            'user_agent' => $request->userAgent(),
+            'ip' => $request->ip(),
+            'time' => now()->toDateTimeString(),
+        ]);
+        $user->forceFill([
             'agent_status' => 'online',
             'last_seen_at' => now(),
-        ]);
+        ])->save();
 
         $this->broadcastAvailabilityForUser($user, $availability);
 
         return response()->json([
-            'status' => 'online',
+            'status' => $user->fresh()->agent_status,
+            'last_seen_at' => $user->fresh()
+                ->last_seen_at
+                ?->toDateTimeString(),
         ]);
     }
 
@@ -30,10 +43,20 @@ class AgentPresenceController extends Controller
     {
         $user = $request->user();
 
-        $user->update([
+        Log::error('AGENT OFFLINE endpoint called', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'route' => $request->route()?->getName(),
+            'url' => $request->fullUrl(),
+            'referer' => $request->header('referer'),
+            'user_agent' => $request->userAgent(),
+            'ip' => $request->ip(),
+            'time' => now()->toDateTimeString(),
+        ]);
+        $user->forceFill([
             'agent_status' => 'offline',
             'last_seen_at' => now(),
-        ]);
+        ])->save();
 
         $this->broadcastAvailabilityForUser($user, $availability);
 
