@@ -32,35 +32,48 @@
                 {{ $slot }}
             </main>
         </div>
+        <meta name="csrf-token" content="{{ csrf_token() }}">
         @auth
         <script>
-        (function () {
-            async function goOnline() {
-                try {
-                    await fetch("{{ route('admin.agent.online') }}", {
-                        method: "POST",
-                        headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}",
-                            "Accept": "application/json"
-                        }
-                    });
-                } catch (e) {}
-            }
+        document.addEventListener('DOMContentLoaded', function () {
+            const csrfToken = document
+                .querySelector('meta[name="csrf-token"]')
+                ?.getAttribute('content');
 
-            function goOffline() {
-                const data = new FormData();
-                data.append("_token", "{{ csrf_token() }}");
+            fetch("{{ route('admin.agent.online') }}", {
+                method: 'POST',
+                credentials: 'same-origin',
+                keepalive: true,
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(async response => {
+                const data = await response.json().catch(() => ({}));
 
-                if (navigator.sendBeacon) {
-                    navigator.sendBeacon("{{ route('admin.agent.offline') }}", data);
+                if (!response.ok) {
+                    console.error(
+                        'Could not mark agent online:',
+                        response.status,
+                        data
+                    );
+
+                    return;
                 }
-            }
 
-            goOnline();
-
-            window.addEventListener("beforeunload", goOffline);
-        })();
+                console.log('Agent presence updated:', data);
+            })
+            .catch(error => {
+                console.error(
+                    'Agent online request failed:',
+                    error
+                );
+            });
+        });
         </script>
-    @endauth
+        @endauth
     </body>
 </html>
