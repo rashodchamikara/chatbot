@@ -1,3 +1,4 @@
+ @php
  $latestUpdate = config('app.latest_update', []);
 
     $showLatestUpdate =
