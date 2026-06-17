@@ -123,4 +123,41 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'latest_update' => [
+        'enabled' => env(
+            'LATEST_UPDATE_ENABLED',
+            false
+        ),
+
+        /*
+        * Change the ID whenever publishing a new update.
+        * Previously dismissed updates will remain hidden, while a new
+        * ID makes the new announcement appear.
+        */
+        'id' => env(
+            'LATEST_UPDATE_ID',
+            '2026-06-live-chat'
+        ),
+
+        'title' => env(
+            'LATEST_UPDATE_TITLE',
+            'Live-agent messaging is now available'
+        ),
+
+        'description' => env(
+            'LATEST_UPDATE_DESCRIPTION',
+            'Take over AI conversations and respond to visitors in real time.'
+        ),
+
+        'url' => env(
+            'LATEST_UPDATE_URL',
+            ''
+        ),
+
+        'link_text' => env(
+            'LATEST_UPDATE_LINK_TEXT',
+            'Learn more'
+        ),
+    ],
+
 ];

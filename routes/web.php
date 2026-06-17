@@ -108,7 +108,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/admin/conversations/{conversation}/close-live-chat', [ConversationController::class, 'closeLiveChat'])
         ->name('admin.conversations.closeLiveChat');
     
-
+    Route::get('/profile', [ProfileController::class, 'edit'])
+    ->middleware('auth')
+    ->name('profile.edit');
 });
 
 Route::middleware('auth')->group(function () {
