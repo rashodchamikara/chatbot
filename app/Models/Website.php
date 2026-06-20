@@ -67,4 +67,8 @@ class Website extends Model
             }
         });
     }
+    public function knowledgeSources()
+    {
+        return $this->hasMany(KnowledgeSource::class);
+    }
 }

@@ -33,6 +33,9 @@ class KnowledgePage extends Model
 
     public function chunks()
     {
-        return $this->hasMany(KnowledgeChunk::class);
+        return $this->hasMany(
+            KnowledgeChunk::class,
+            'knowledge_page_id'
+        );
     }
 }

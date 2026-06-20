@@ -13,21 +13,35 @@ use App\Services\SalesBrainService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\Knowledge\KnowledgeContextBuilder;
+use App\Services\Knowledge\KnowledgeRetriever;
 
 class ChatController extends Controller
 {
 
+    public function __construct(
+    private readonly KnowledgeRetriever $knowledgeRetriever,
+    private readonly KnowledgeContextBuilder $contextBuilder
+    ) {
+    }
+
     public function message(
         Request $request,
         SalesBrainService $brain,
-        LeadCaptureService $leadCaptureService
+        LeadCaptureService $leadCaptureService,
+        KnowledgeRetriever $knowledgeRetriever,
+        KnowledgeContextBuilder $knowledgeContextBuilder
     ): JsonResponse {
+        /*
+        * Validate the visitor message.
+        */
         $validated = $request->validate([
             'message' => [
                 'required',
                 'string',
                 'max:5000',
             ],
+
             'visitor_id' => [
                 'required',
                 'string',
@@ -35,6 +49,9 @@ class ChatController extends Controller
             ],
         ]);
 
+        /*
+        * Resolve the website using your existing embed-token logic.
+        */
         $website = $this->resolveWebsite($request);
 
         if (!$website) {
@@ -44,6 +61,9 @@ class ChatController extends Controller
             ], 404);
         }
 
+        /*
+        * Find the existing conversation or create one.
+        */
         $conversation = Conversation::firstOrCreate(
             [
                 'website_id' => $website->id,
@@ -56,16 +76,26 @@ class ChatController extends Controller
             ]
         );
 
-  
+        /*
+        * Older conversation records may not have a mode.
+        */
         if (!$conversation->mode) {
             $conversation->forceFill([
                 'mode' => 'ai',
             ])->save();
         }
 
-
+        /*
+        * Load previous conversation history.
+        *
+        * This happens before saving the current message so the
+        * current visitor message is not sent to the AI twice.
+        */
         $history = Message::query()
-            ->where('conversation_id', $conversation->id)
+            ->where(
+                'conversation_id',
+                $conversation->id
+            )
             ->where('is_system', false)
             ->whereIn('sender', [
                 'visitor',
@@ -78,9 +108,10 @@ class ChatController extends Controller
             ->reverse()
             ->map(function (Message $message): array {
                 return [
-                    'role' => $message->sender === 'visitor'
-                        ? 'user'
-                        : 'assistant',
+                    'role' =>
+                        $message->sender === 'visitor'
+                            ? 'user'
+                            : 'assistant',
 
                     'content' => $message->message,
                 ];
@@ -88,24 +119,36 @@ class ChatController extends Controller
             ->values()
             ->toArray();
 
+        /*
+        * Save the current visitor message.
+        */
         $visitorMessage = Message::create([
             'conversation_id' => $conversation->id,
             'user_id' => null,
             'sender' => 'visitor',
             'is_system' => false,
-            'message' => trim($validated['message']),
+            'message' => trim(
+                $validated['message']
+            ),
         ]);
 
         $conversation->touch();
 
         broadcast(
-            new ConversationMessageCreated($visitorMessage)
+            new ConversationMessageCreated(
+                $visitorMessage
+            )
         );
 
- 
+        /*
+        * Refresh in case conversation mode was changed
+        * by a live agent or another process.
+        */
         $conversation->refresh();
 
-
+        /*
+        * Do not generate an AI response during live-agent mode.
+        */
         if (
             in_array(
                 $conversation->mode,
@@ -118,9 +161,14 @@ class ChatController extends Controller
                 'reply' => null,
                 'reply_message' => null,
                 'mode' => $conversation->mode,
-                'conversation_id' => $conversation->id,
+
+                'conversation_id' =>
+                    $conversation->id,
+
                 'conversation_channel' =>
-                    $this->conversationChannel($conversation),
+                    $this->conversationChannel(
+                        $conversation
+                    ),
 
                 'message' =>
                     $conversation->mode === 'live'
@@ -129,29 +177,90 @@ class ChatController extends Controller
             ]);
         }
 
- 
-        $leadResult = $leadCaptureService->processMessage(
-            $website,
-            $conversation,
-            $validated['message']
-        );
+        /*
+        * Process lead capture information.
+        */
+        $leadResult =
+            $leadCaptureService->processMessage(
+                $website,
+                $conversation,
+                $validated['message']
+            );
 
         $lead = $leadResult['lead'] ?? null;
 
-        $leadStage = $leadResult['lead_stage']
+        $leadStage =
+            $leadResult['lead_stage']
             ?? $conversation->lead_stage
             ?? 'discovery';
 
-        $nextLeadQuestion = $leadResult['next_question']
+        $nextLeadQuestion =
+            $leadResult['next_question']
             ?? null;
 
+        /*
+        * Retrieve matching chunks from:
+        *
+        * 1. Existing crawled URLs
+        * 2. Uploaded documents
+        *
+        * IMPORTANT:
+        * Use $knowledgeRetriever, not $this->knowledgeRetriever,
+        * because it was injected into this method.
+        */
+        $knowledgeResults = [];
+
+        $knowledgeContext =
+            'No relevant knowledge was found for this question.';
+
+        try {
+            $knowledgeResults =
+                $knowledgeRetriever->retrieve(
+                    $website,
+                    $validated['message']
+                );
+
+            /*
+            * Convert the selected chunks into readable text
+            * that can be included in the AI system prompt.
+            */
+            $knowledgeContext =
+                $knowledgeContextBuilder->build(
+                    $knowledgeResults
+                );
+        } catch (\Throwable $exception) {
+            /*
+            * Retrieval failure should not completely stop
+            * the chatbot.
+            */
+            \Log::error(
+                'Knowledge retrieval failed.',
+                [
+                    'website_id' => $website->id,
+
+                    'conversation_id' =>
+                        $conversation->id,
+
+                    'error' =>
+                        $exception->getMessage(),
+                ]
+            );
+        }
+
+        /*
+        * Generate the AI response.
+        *
+        * The final parameter is the newly retrieved
+        * knowledge context.
+        */
         $aiText = $brain->analyze(
             $validated['message'],
             $website,
             $history,
             $lead,
             $leadStage,
-            $nextLeadQuestion
+            $nextLeadQuestion,
+            $knowledgeContext
         );
 
         $aiText = trim((string) $aiText);
@@ -161,8 +270,13 @@ class ChatController extends Controller
                 'Sorry, I could not generate a response right now.';
         }
 
+        /*
+        * Save the AI message.
+        */
         $aiMessage = Message::create([
-            'conversation_id' => $conversation->id,
+            'conversation_id' =>
+                $conversation->id,
+
             'user_id' => null,
             'sender' => 'ai',
             'is_system' => false,
@@ -171,27 +285,35 @@ class ChatController extends Controller
 
         $conversation->touch();
 
- 
         broadcast(
-            new ConversationMessageCreated($aiMessage)
+            new ConversationMessageCreated(
+                $aiMessage
+            )
         );
 
- 
+        /*
+        * Return the response to the chat widget.
+        */
         return response()->json([
             'success' => true,
 
-            
             'reply' => $aiMessage->message,
 
             'reply_message' =>
-                $this->formatMessage($aiMessage),
+                $this->formatMessage(
+                    $aiMessage
+                ),
 
-            'mode' => $conversation->mode ?: 'ai',
+            'mode' =>
+                $conversation->mode ?: 'ai',
 
-            'conversation_id' => $conversation->id,
+            'conversation_id' =>
+                $conversation->id,
 
             'conversation_channel' =>
-                $this->conversationChannel($conversation),
+                $this->conversationChannel(
+                    $conversation
+                ),
 
             'lead' => $lead
                 ? [
@@ -200,14 +322,18 @@ class ChatController extends Controller
                     'email' => $lead->email,
                     'phone' => $lead->phone,
                     'country' => $lead->country,
+
                     'preferred_contact_time' =>
                         $lead->preferred_contact_time,
 
                     'product_interest' =>
                         $lead->product_interest,
 
-                    'lead_score' => $lead->lead_score,
-                    'status' => $lead->status,
+                    'lead_score' =>
+                        $lead->lead_score,
+
+                    'status' =>
+                        $lead->status,
                 ]
                 : null,
 
@@ -589,4 +715,5 @@ class ChatController extends Controller
                     ?->toISOString(),
         ];
     }
+    
 }
