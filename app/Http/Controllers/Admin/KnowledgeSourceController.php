@@ -17,7 +17,7 @@ class KnowledgeSourceController extends Controller
 {
     public function index(Website $website)
     {
-        $this->authorize('update', $website);
+       
 
         $sources = KnowledgeSource::query()
             ->where(
@@ -41,7 +41,7 @@ class KnowledgeSourceController extends Controller
         StoreKnowledgeSourceRequest $request,
         Website $website
     ): RedirectResponse {
-        $this->authorize('update', $website);
+        
 
         $disk = config('knowledge.disk');
 
