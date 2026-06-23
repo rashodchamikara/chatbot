@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\WebsiteController as AdminWebsiteController;
 use App\Http\Controllers\Admin\KnowledgePageController;
 use App\Http\Controllers\Admin\AgentPresenceController;
+use App\Http\Controllers\Admin\KnowledgeSourceController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -112,6 +113,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     ->middleware('auth')
     ->name('profile.edit');
 });
+
+Route::middleware(['auth'])->scopeBindings()->prefix('websites/{website}/knowledge-sources')->name('websites.knowledge-sources.')->group(function () {
+        Route::get('/',[KnowledgeSourceController::class,'index',])->name('index');
+
+        Route::post('/',[KnowledgeSourceController::class,'store',])->name('store');
+    });
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

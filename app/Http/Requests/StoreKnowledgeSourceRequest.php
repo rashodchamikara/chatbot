@@ -2,13 +2,11 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\File;
 
 class StoreKnowledgeSourceRequest extends FormRequest
 {
-    
     public function authorize(): bool
     {
         return true;
@@ -22,20 +20,28 @@ class StoreKnowledgeSourceRequest extends FormRequest
                 'array',
                 'min:1',
                 'max:' . config(
-                    'knowledge.max_files_per_upload'
+                    'knowledge.max_files_per_upload',
+                    10
                 ),
             ],
 
             'files.*' => [
                 'required',
 
-                File::types(
+                File::types([
+                    'pdf',
+                    'docx',
+                    'txt',
+                    'csv',
+                    'xlsx',
+                    'jpg',
+                    'jpeg',
+                    'png',
+                    'webp',
+                ])->max(
                     config(
-                        'knowledge.allowed_extensions'
-                    )
-                )->max(
-                    config(
-                        'knowledge.max_file_size_kb'
+                        'knowledge.max_file_size_kb',
+                        51200
                     )
                 ),
             ],
