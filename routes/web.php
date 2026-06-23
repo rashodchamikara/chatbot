@@ -112,13 +112,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])
     ->middleware('auth')
     ->name('profile.edit');
+
+    Route::get('/admin/websites/{website}/knowledge-sources', [KnowledgeSourceController::class, 'index'])
+    ->name('admin.websites.knowledge-sources.index');
+
+    Route::post('/admin/websites/{website}/knowledge-sources',[KnowledgeSourceController::class, 'store'])
+    ->name('admin.websites.knowledge-sources.store');
 });
 
-Route::middleware(['auth'])->scopeBindings()->prefix('websites/{website}/knowledge-sources')->name('websites.knowledge-sources.')->group(function () {
-        Route::get('/',[KnowledgeSourceController::class,'index',])->name('index');
-
-        Route::post('/',[KnowledgeSourceController::class,'store',])->name('store');
-    });
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

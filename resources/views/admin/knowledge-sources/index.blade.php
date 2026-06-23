@@ -47,7 +47,7 @@
             <form
                 method="POST"
                 action="{{ route(
-                    'websites.knowledge-sources.store',
+                    'admin.websites.knowledge-sources.store',
                     $website
                 ) }}"
                 enctype="multipart/form-data"
