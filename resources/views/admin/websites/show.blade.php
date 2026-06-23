@@ -172,9 +172,9 @@
                                     <button class="inline-flex flex-1 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">
                                         {{ $indexingStatus === 'processing' ? 'Restart indexing' : 'Index / re-index website' }}
                                     </button>
-                                    <a href="{{ route('admin.websites.knowledge.index', $website) }}"
+                                    <a href="{{ route('websites.knowledge-sources.index', $website) }}"
                                        class="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                                        Knowledge base
+                                        Knowledge Sources
                                     </a>
                                 </div>
                             </form>

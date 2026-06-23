@@ -32,7 +32,7 @@ class KnowledgeSourceController extends Controller
             ->paginate(20);
 
         return view(
-            'knowledge.sources.index',
+            'admin.knowledge.sources.index',
             compact('website', 'sources')
         );
     }
