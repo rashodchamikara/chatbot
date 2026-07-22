@@ -38,6 +38,7 @@ class KnowledgeSource extends Model
         'processing_error',
         'metadata',
         'processed_at',
+        'extracted_storage_path',
     ];
 
     protected $casts = [
