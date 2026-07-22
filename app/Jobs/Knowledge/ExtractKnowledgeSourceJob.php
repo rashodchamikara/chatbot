@@ -292,41 +292,38 @@ class ExtractKnowledgeSourceJob implements ShouldQueue
                 ->onConnection('database')
                 ->onQueue('knowledge-extract');
         } catch (Throwable $exception) {
+            $realError = sprintf(
+                '%s: %s',
+                get_class($exception),
+                $exception->getMessage()
+            );
+
             $source->forceFill([
                 'status' => 'failed',
-
-                'processing_error' =>
-                    mb_substr(
-                        $exception->getMessage(),
-                        0,
-                        5000
-                    ),
+                'processing_error' => mb_substr(
+                    $realError,
+                    0,
+                    5000
+                ),
             ])->save();
 
             Log::error(
                 'Knowledge source extraction failed.',
                 [
-                    'knowledge_source_id' =>
-                        $source->id,
-
-                    'website_id' =>
-                        $source->website_id,
-
-                    'storage_disk' =>
-                        $source->storage_disk,
-
-                    'storage_path' =>
-                        $source->storage_path,
-
-                    'exception_class' =>
-                        get_class($exception),
-
-                    'error' =>
-                        $exception->getMessage(),
+                    'knowledge_source_id' => $source->id,
+                    'website_id' => $source->website_id,
+                    'storage_disk' => $source->storage_disk,
+                    'storage_path' => $source->storage_path,
+                    'exception_class' => get_class($exception),
+                    'error' => $exception->getMessage(),
+                    'file' => $exception->getFile(),
+                    'line' => $exception->getLine(),
                 ]
             );
 
-            throw $exception;
+            $this->fail($exception);
+
+            return;
         } finally {
             /*
              * Always remove the temporary local file.
@@ -447,9 +444,8 @@ class ExtractKnowledgeSourceJob implements ShouldQueue
         return $temporaryFilePath;
     }
 
-    public function failed(
-        ?Throwable $exception
-    ): void {
+    public function failed(?Throwable $exception): void
+    {
         $source = KnowledgeSource::query()
             ->find($this->knowledgeSourceId);
 
@@ -457,12 +453,20 @@ class ExtractKnowledgeSourceJob implements ShouldQueue
             return;
         }
 
+        /*
+        * Do not overwrite a more useful processing_error that was already
+        * saved inside handle().
+        */
+        if (!empty($source->processing_error)) {
+            return;
+        }
+
         $source->forceFill([
             'status' => 'failed',
-
             'processing_error' => mb_substr(
-                $exception?->getMessage()
-                    ?? 'Document extraction failed after all retry attempts.',
+                $exception
+                    ? get_class($exception) . ': ' . $exception->getMessage()
+                    : 'Document extraction failed after all retry attempts.',
                 0,
                 5000
             ),
@@ -471,11 +475,8 @@ class ExtractKnowledgeSourceJob implements ShouldQueue
         Log::critical(
             'Knowledge source extraction permanently failed.',
             [
-                'knowledge_source_id' =>
-                    $this->knowledgeSourceId,
-
-                'error' =>
-                    $exception?->getMessage(),
+                'knowledge_source_id' => $this->knowledgeSourceId,
+                'error' => $exception?->getMessage(),
             ]
         );
     }
