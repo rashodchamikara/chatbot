@@ -6,15 +6,8 @@ use App\Models\KnowledgeSource;
 
 interface DocumentExtractor
 {
-    public function supports(
-        KnowledgeSource $source
-    ): bool;
-
     /**
-     * @return array<ExtractedSegment>
+     * @return array<int, ExtractedSegment>
      */
-    public function extract(
-        KnowledgeSource $source,
-        string $localPath
-    ): array;
+    public function extract(KnowledgeSource $source, string $localPath): array;
 }
