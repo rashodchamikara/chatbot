@@ -2,7 +2,6 @@
 
 namespace App\Services\Knowledge\Extraction;
 
-use App\Models\KnowledgeSource;
 use PhpOffice\PhpWord\Element\AbstractElement;
 use PhpOffice\PhpWord\Element\Table;
 use PhpOffice\PhpWord\Element\Text;
@@ -17,11 +16,8 @@ class DocxExtractor implements DocumentExtractor
         return $source->extension === 'docx';
     }
 
-    public function extract(
-        KnowledgeSource $source,
-        string $localPath
-    ): array {
-        $document = IOFactory::load($localPath);
+    public function extract(string $filePath): array {
+        $document = IOFactory::load($filePath);
         $segments = [];
 
         foreach (

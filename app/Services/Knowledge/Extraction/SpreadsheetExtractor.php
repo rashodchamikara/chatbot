@@ -16,12 +16,9 @@ class SpreadsheetExtractor implements DocumentExtractor
         );
     }
 
-    public function extract(
-        KnowledgeSource $source,
-        string $localPath
-    ): array {
+   public function extract(string $filePath): array {
         $spreadsheet = IOFactory::load(
-            $localPath
+            $filePath
         );
 
         $segments = [];

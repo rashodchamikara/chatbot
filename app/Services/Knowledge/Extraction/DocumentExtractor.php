@@ -7,7 +7,5 @@ interface DocumentExtractor
     /**
      * @return array<int, ExtractedSegment>
      */
-    public function extract(
-        string $filePath
-    ): array;
+    public function extract(string $filePath): array;
 }

@@ -2,84 +2,68 @@
 
 namespace App\Services\Knowledge\Extraction;
 
-use App\Models\KnowledgeSource;
+use RuntimeException;
 use Smalot\PdfParser\Parser;
 
 class PdfTextExtractor implements DocumentExtractor
 {
-    public function __construct(
-        private readonly Parser $parser
-    ) {
-    }
+    /**
+     * @return array<int, ExtractedSegment>
+     */
+    public function extract(string $filePath): array
+    {
+        if (!is_file($filePath)) {
+            throw new RuntimeException("PDF file does not exist: {$filePath}");
+        }
 
-    public function supports(
-        KnowledgeSource $source
-    ): bool {
-        return $source->extension === 'pdf';
-    }
+        if (!is_readable($filePath)) {
+            throw new RuntimeException("PDF file is not readable: {$filePath}");
+        }
 
-    public function extract(
-        KnowledgeSource $source,
-        string $localPath
-    ): array {
-        $pdf = $this->parser->parseFile(
-            $localPath
-        );
+        $parser = new Parser();
+        $pdf = $parser->parseFile($filePath);
 
-        $segments = [];
-        $totalCharacters = 0;
         $pages = $pdf->getPages();
+        $segments = [];
 
         foreach ($pages as $index => $page) {
-            $text = $this->normalize(
-                $page->getText()
-            );
+            $text = trim($this->normalizeText($page->getText()));
 
             if ($text === '') {
                 continue;
             }
 
-            $totalCharacters += mb_strlen($text);
-
             $segments[] = new ExtractedSegment(
                 text: $text,
                 pageNumber: $index + 1,
+                sectionTitle: null,
                 metadata: [
-                    'extractor' =>
-                        self::class,
+                    'extractor' => 'pdf_text',
+                    'page_number' => $index + 1,
+                    'filename' => basename($filePath),
+                    'character_count' => mb_strlen($text, 'UTF-8'),
                 ],
             );
         }
 
-        if (
-            count($pages) > 0
-            && $totalCharacters <
-                count($pages) * 80
-        ) {
-            throw new OcrRequiredException(
-                'The PDF appears to be scanned.'
+        if (empty($segments)) {
+            throw new RuntimeException(
+                'No readable text was extracted from this PDF. If this is a scanned image PDF, OCR support is required.'
             );
         }
 
         return $segments;
     }
 
-    private function normalize(
-        string $text
-    ): string {
-        $text = str_replace("\0", '', $text);
+    private function normalizeText(string $text): string
+    {
+        if (!mb_check_encoding($text, 'UTF-8')) {
+            $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+        }
 
-        $text = preg_replace(
-            '/[ \t]+/u',
-            ' ',
-            $text
-        );
-
-        $text = preg_replace(
-            '/\R{3,}/u',
-            "\n\n",
-            $text
-        );
+        $text = str_replace(["\r\n", "\r"], "\n", $text);
+        $text = preg_replace('/[ \t]+/', ' ', $text) ?? $text;
+        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
 
         return trim($text);
     }
