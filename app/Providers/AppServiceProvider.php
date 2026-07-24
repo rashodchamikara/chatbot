@@ -9,6 +9,7 @@ use App\Services\Knowledge\Extraction\ExtractorManager;
 use App\Services\Knowledge\Extraction\PdfTextExtractor;
 use App\Services\Knowledge\Extraction\PlainTextExtractor;
 use App\Services\Knowledge\Extraction\SpreadsheetExtractor;
+use App\Services\Knowledge\Extraction\ImageOcrExtractor;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -35,6 +36,10 @@ class AppServiceProvider extends ServiceProvider
 
                 spreadsheetExtractor: $app->make(
                     SpreadsheetExtractor::class
+                ),
+
+                imageOcrExtractor: $app->make(
+                    ImageOcrExtractor::class
                 )
             );
         }
