@@ -31,25 +31,42 @@ class ChunkKnowledgeSourceJob implements ShouldQueue
             $this->sourceId
         );
 
-        $compressed = Storage::disk(
-            $source->storage_disk
-        )->get(
-            $source->extracted_path
-        );
+        $disk = $source->storage_disk;
+        $path = $source->extracted_storage_path;
 
-        $json = gzdecode($compressed);
-
-        if ($json === false) {
-            throw new RuntimeException(
-                'Unable to decode extracted document.'
-            );
+        if (empty($disk)) {
+            throw new RuntimeException("Knowledge source {$source->id} has no storage_disk.");
         }
 
-        $segments = json_decode(
-            $json,
-            true,
-            flags: JSON_THROW_ON_ERROR
-        );
+        if (empty($path)) {
+            throw new RuntimeException("Knowledge source {$source->id} has no extracted_storage_path.");
+        }
+
+        if (!Storage::disk($disk)->exists($path)) {
+            throw new RuntimeException("Extracted file does not exist on disk [{$disk}]: {$path}");
+        }
+
+        $rawContents = Storage::disk($disk)->get($path);
+
+        if ($rawContents === '') {
+            throw new RuntimeException("Extracted file is empty: {$path}");
+        }
+
+        $json = str_ends_with($path, '.gz')
+            ? gzdecode($rawContents)
+            : $rawContents;
+
+        if ($json === false) {
+            throw new RuntimeException("Unable to decompress extracted file: {$path}");
+        }
+
+        $payload = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+
+        $segments = $payload['segments'] ?? [];
+
+        if (empty($segments)) {
+            throw new RuntimeException("Extracted file contains no segments: {$path}");
+        }
 
         $chunkRows = [];
         $chunkIndex = 0;
