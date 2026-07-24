@@ -27,42 +27,42 @@ class KnowledgeChunk extends Model
         'embedded_at',
     ];
 
-     protected $casts = [
+    protected $casts = [
         'embedding' => 'array',
-        'metadata'           => 'array',
-        'is_active'          => 'boolean',
-        'embedded_at'        => 'datetime',
+        'metadata' => 'array',
+        'is_active' => 'boolean',
+        'embedded_at' => 'datetime',
         'processing_version' => 'integer',
-        'token_count'        => 'integer',
-        'page_number'        => 'integer',
+        'token_count' => 'integer',
+        'page_number' => 'integer',
         'chunk_index' => 'integer',
     ];
 
-    public function page()
-    {
-        return $this->belongsTo(KnowledgePage::class, 'knowledge_page_id');
-    }
-
-    public function website()
+    public function website(): BelongsTo
     {
         return $this->belongsTo(Website::class);
     }
 
-    public function knowledgePage()
+    public function page(): BelongsTo
     {
-        return $this->belongsTo(
-            KnowledgePage::class,
-            'knowledge_page_id'
-        );
+        return $this->belongsTo(KnowledgePage::class, 'knowledge_page_id');
     }
 
-    public function knowledgeSource()
+    public function knowledgePage(): BelongsTo
     {
-        return $this->belongsTo(
-            KnowledgeSource::class,
-            'knowledge_source_id'
-        );
+        return $this->belongsTo(KnowledgePage::class, 'knowledge_page_id');
     }
+
+    public function source(): BelongsTo
+    {
+        return $this->belongsTo(KnowledgeSource::class, 'knowledge_source_id');
+    }
+
+    public function knowledgeSource(): BelongsTo
+    {
+        return $this->belongsTo(KnowledgeSource::class, 'knowledge_source_id');
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
@@ -70,11 +70,22 @@ class KnowledgeChunk extends Model
 
     public function scopeForWebsite($query, int $websiteId)
     {
-        return $query->where(
-            'website_id',
-            $websiteId
-        );
+        return $query->where('website_id', $websiteId);
     }
+
+    public function scopeWithEmbedding($query)
+    {
+        return $query->whereNotNull('embedding');
+    }
+
+    public function scopeWithAnyKnowledgeSource($query)
+    {
+        return $query->where(function ($query) {
+            $query->whereNotNull('knowledge_page_id')
+                ->orWhereNotNull('knowledge_source_id');
+        });
+    }
+
     public function isCrawledPageChunk(): bool
     {
         return $this->knowledge_page_id !== null;
@@ -88,7 +99,9 @@ class KnowledgeChunk extends Model
     public function getSourceNameAttribute(): string
     {
         if ($this->knowledgeSource) {
-            return $this->knowledgeSource->name;
+            return $this->knowledgeSource->original_name
+                ?? $this->knowledgeSource->name
+                ?? 'Uploaded knowledge source';
         }
 
         if ($this->knowledgePage) {
@@ -98,5 +111,25 @@ class KnowledgeChunk extends Model
         }
 
         return 'Unknown source';
+    }
+
+    public function getSourceUrlAttribute(): ?string
+    {
+        return $this->knowledgePage?->url
+            ?? $this->page?->url
+            ?? null;
+    }
+
+    public function getSourceTypeAttribute(): string
+    {
+        if ($this->knowledge_source_id !== null) {
+            return 'uploaded_file';
+        }
+
+        if ($this->knowledge_page_id !== null) {
+            return 'web_page';
+        }
+
+        return 'unknown';
     }
 }
