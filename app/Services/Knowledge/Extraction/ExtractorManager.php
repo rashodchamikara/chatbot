@@ -10,7 +10,8 @@ class ExtractorManager
         private readonly PdfTextExtractor $pdfExtractor,
         private readonly PlainTextExtractor $plainTextExtractor,
         private readonly DocxExtractor $docxExtractor,
-        private readonly SpreadsheetExtractor $spreadsheetExtractor
+        private readonly SpreadsheetExtractor $spreadsheetExtractor,
+        private readonly ImageOcrExtractor $imageOcrExtractor,
     ) {
     }
 
@@ -133,7 +134,7 @@ class ExtractorManager
         if (
             in_array(
                 $extension,
-                ['jpg', 'jpeg', 'png', 'webp'],
+                ['jpg', 'jpeg', 'png', 'bmp', 'tif', 'tiff'],
                 true
             )
             || str_starts_with(
@@ -141,9 +142,7 @@ class ExtractorManager
                 'image/'
             )
         ) {
-            throw new OcrRequiredException(
-                'This image requires OCR processing before text can be extracted.'
-            );
+            return $this->imageOcrExtractor;
         }
 
         throw new InvalidArgumentException(
