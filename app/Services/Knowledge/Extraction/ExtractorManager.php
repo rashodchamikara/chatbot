@@ -1,5 +1,4 @@
-<?php
-
+<?PHP
 namespace App\Services\Knowledge\Extraction;
 
 use InvalidArgumentException;

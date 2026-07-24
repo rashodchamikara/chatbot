@@ -1,5 +1,4 @@
-<?php
-
+<?PHP 
 namespace App\Services\Knowledge\Extraction;
 
 final readonly class ExtractedSegment
@@ -16,9 +15,15 @@ final readonly class ExtractedSegment
     {
         return [
             'text' => $this->text,
-            'page_number' => $this->pageNumber,
-            'section_title' => $this->sectionTitle,
-            'metadata' => $this->metadata,
+
+            'page_number' =>
+                $this->pageNumber,
+
+            'section_title' =>
+                $this->sectionTitle,
+
+            'metadata' =>
+                $this->metadata,
         ];
     }
 }
