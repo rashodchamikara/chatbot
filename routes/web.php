@@ -11,6 +11,8 @@ use App\Http\Controllers\Admin\WebsiteController as AdminWebsiteController;
 use App\Http\Controllers\Admin\KnowledgePageController;
 use App\Http\Controllers\Admin\AgentPresenceController;
 use App\Http\Controllers\Admin\KnowledgeSourceController;
+use App\Http\Controllers\Admin\System\UserManagementController;
+use App\Http\Controllers\Admin\System\WebsiteManagementController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -118,6 +120,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/admin/websites/{website}/knowledge-sources',[KnowledgeSourceController::class, 'store'])
     ->name('admin.websites.knowledge-sources.store');
+
+    Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
+        Route::get('/users/create', [UserManagementController::class, 'create'])->name('users.create');
+        Route::post('/users', [UserManagementController::class, 'store'])->name('users.store');
+        Route::get('/users/{user}/edit', [UserManagementController::class, 'edit'])->name('users.edit');
+        Route::patch('/users/{user}', [UserManagementController::class, 'update'])->name('users.update');
+        Route::post('/users/{user}/suspend', [UserManagementController::class, 'suspend'])->name('users.suspend');
+        Route::post('/users/{user}/activate', [UserManagementController::class, 'activate'])->name('users.activate');
+        Route::delete('/users/{user}', [UserManagementController::class, 'destroy'])->name('users.destroy');
+
+        Route::get('/websites', [WebsiteManagementController::class, 'index'])->name('websites.index');
+        Route::post('/websites/{website}/suspend', [WebsiteManagementController::class, 'suspend'])->name('websites.suspend');
+        Route::post('/websites/{website}/activate', [WebsiteManagementController::class, 'activate'])->name('websites.activate');
+        Route::delete('/websites/{website}', [WebsiteManagementController::class, 'destroy'])->name('websites.destroy');
 });
 
 

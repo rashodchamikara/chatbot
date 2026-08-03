@@ -5,10 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Website extends Model
 {
     use HasFactory;
+    use SoftDeletes;
 
     protected $fillable = [
         'tenant_id',
@@ -27,6 +29,8 @@ class Website extends Model
         'indexing_error',
         'realtime_token',
         'live_chat_enabled',
+        'suspended_at',
+        'suspended_by',
     ];
 
     protected $casts = [
@@ -35,6 +39,7 @@ class Website extends Model
         'indexing_started_at' => 'datetime',
         'indexing_completed_at' => 'datetime',
         'live_chat_enabled' => 'boolean',
+        'suspended_at' => 'datetime',
     ];
 
     public function tenant()
@@ -70,5 +75,9 @@ class Website extends Model
     public function knowledgeSources()
     {
         return $this->hasMany(KnowledgeSource::class);
+    }
+
+    public function suspendedBy(){
+        return $this->belongsTo(\App\Models\User::class, 'suspended_by');
     }
 }
