@@ -397,6 +397,67 @@
                                 Tenants
                             </a>
                         @endif
+                        @if(auth()->user()?->isSuperAdmin())
+                                <div class="mx-2 h-6 w-px bg-slate-200"></div>
+
+                                <a
+                                    href="{{ route('admin.system.users.index') }}"
+                                    class="group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition
+                                        {{ request()->routeIs('admin.system.users.*')
+                                            ? 'bg-violet-50 text-violet-700'
+                                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                        }}"
+                                >
+                                    <svg
+                                        class="h-4 w-4 {{ request()->routeIs('admin.system.users.*') ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600' }}"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"
+                                        />
+                                        <circle cx="9" cy="7" r="4"/>
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M19 8v6M22 11h-6"
+                                        />
+                                    </svg>
+
+                                    Users
+                                </a>
+
+                                <a
+                                    href="{{ route('admin.system.websites.index') }}"
+                                    class="group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition
+                                        {{ request()->routeIs('admin.system.websites.*')
+                                            ? 'bg-violet-50 text-violet-700'
+                                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                        }}"
+                                >
+                                    <svg
+                                        class="h-4 w-4 {{ request()->routeIs('admin.system.websites.*') ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600' }}"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        aria-hidden="true"
+                                    >
+                                        <circle cx="12" cy="12" r="9"/>
+                                        <path
+                                            stroke-linecap="round"
+                                            d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"
+                                        />
+                                    </svg>
+
+                                    System Websites
+                                </a>
+                            @endif
                     </div>
                 </div>
 
@@ -886,6 +947,75 @@
                         Tenants
                     </a>
                 @endif
+                @if(auth()->user()?->isSuperAdmin())
+                <div class="my-5 border-t border-slate-200"></div>
+
+                <p class="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    System Admin
+                </p>
+
+                <div class="space-y-1">
+                    <a
+                        href="{{ route('admin.system.users.index') }}"
+                        @click="closeMobile()"
+                        class="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold
+                            {{ request()->routeIs('admin.system.users.*')
+                                ? 'bg-violet-50 text-violet-700'
+                                : 'text-slate-700 hover:bg-slate-100'
+                            }}"
+                    >
+                        <svg
+                            class="h-5 w-5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            aria-hidden="true"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"
+                            />
+                            <circle cx="9" cy="7" r="4"/>
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M19 8v6M22 11h-6"
+                            />
+                        </svg>
+
+                        Users
+                    </a>
+
+                    <a
+                        href="{{ route('admin.system.websites.index') }}"
+                        @click="closeMobile()"
+                        class="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold
+                            {{ request()->routeIs('admin.system.websites.*')
+                                ? 'bg-violet-50 text-violet-700'
+                                : 'text-slate-700 hover:bg-slate-100'
+                            }}"
+                    >
+                        <svg
+                            class="h-5 w-5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            aria-hidden="true"
+                        >
+                            <circle cx="12" cy="12" r="9"/>
+                            <path
+                                stroke-linecap="round"
+                                d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"
+                            />
+                        </svg>
+
+                        System Websites
+                    </a>
+                </div>
+            @endif
             </div>
 
             <div class="my-5 border-t border-slate-200"></div>
