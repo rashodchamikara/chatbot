@@ -110,7 +110,7 @@
                     <span x-text="submitting ? 'Creating…' : 'Create user'"></span>
                 </button>
             </div>
-            <div class="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-5"><a href="{{ route('admin.system.users.index') }}" class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">Cancel</a><button :disabled="submitting" class="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"><span x-text="submitting ? 'Creating…' : 'Create user'"></span></button></div>
+            
         </form>
     </div></div>
 </x-app-layout>
