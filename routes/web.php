@@ -4,13 +4,15 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\WebsiteController;
+
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LeadController;
 use App\Http\Controllers\Admin\ConversationController;
 use App\Http\Controllers\Admin\WebsiteController as AdminWebsiteController;
 use App\Http\Controllers\Admin\KnowledgePageController;
-use App\Http\Controllers\Admin\AgentPresenceController;
 use App\Http\Controllers\Admin\KnowledgeSourceController;
+use App\Http\Controllers\Admin\AgentPresenceController;
+
 use App\Http\Controllers\Admin\System\UserManagementController;
 use App\Http\Controllers\Admin\System\WebsiteManagementController;
 
@@ -18,10 +20,17 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
 
+
+Route::middleware([
+    'auth',
+    'verified',
+    'active.user',
+])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
+
+    
 
     Route::get('/admin/leads', [LeadController::class, 'index'])
         ->name('admin.leads.index');
@@ -32,14 +41,27 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/admin/leads/{lead}/status', [LeadController::class, 'updateStatus'])
         ->name('admin.leads.updateStatus');
 
+    
+
     Route::get('/admin/conversations', [ConversationController::class, 'index'])
         ->name('admin.conversations.index');
 
     Route::get('/admin/conversations/{conversation}', [ConversationController::class, 'show'])
         ->name('admin.conversations.show');
 
+    Route::post('/admin/conversations/{conversation}/take', [ConversationController::class, 'take'])
+        ->name('admin.conversations.take');
+
+    Route::post('/admin/conversations/{conversation}/messages', [ConversationController::class, 'sendMessage'])
+        ->name('admin.conversations.messages.store');
+
+    Route::post('/admin/conversations/{conversation}/close-live-chat', [ConversationController::class, 'closeLiveChat'])
+        ->name('admin.conversations.closeLiveChat');
+
+    
+
     Route::get('/admin/websites', [AdminWebsiteController::class, 'index'])
-    ->name('admin.websites.index');
+        ->name('admin.websites.index');
 
     Route::get('/admin/websites/create', [AdminWebsiteController::class, 'create'])
         ->name('admin.websites.create');
@@ -62,8 +84,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/admin/websites/{website}/index-knowledge', [AdminWebsiteController::class, 'indexKnowledge'])
         ->name('admin.websites.indexKnowledge');
 
+   
+
     Route::get('/admin/websites/{website}/knowledge', [KnowledgePageController::class, 'index'])
-    ->name('admin.websites.knowledge.index');
+        ->name('admin.websites.knowledge.index');
 
     Route::get('/admin/websites/{website}/knowledge/create', [KnowledgePageController::class, 'create'])
         ->name('admin.websites.knowledge.create');
@@ -91,57 +115,85 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/admin/knowledge-pages/{knowledgePage}/toggle-active', [KnowledgePageController::class, 'toggleActive'])
         ->name('admin.knowledge.toggleActive');
-    Route::post('/admin/agent/online', [AgentPresenceController::class, 'online'])
-    ->name('admin.agent.online');
 
-    Route::post('/admin/agent/offline', [AgentPresenceController::class, 'offline'])
-    ->name('admin.agent.offline');
-    Route::get('/admin/conversations', [ConversationController::class, 'index'])
-    ->name('admin.conversations.index');
-
-    Route::get('/admin/conversations/{conversation}', [ConversationController::class, 'show'])
-        ->name('admin.conversations.show');
-
-    Route::post('/admin/conversations/{conversation}/take', [ConversationController::class, 'take'])
-        ->name('admin.conversations.take');
-
-    Route::post('/admin/conversations/{conversation}/messages', [ConversationController::class, 'sendMessage'])
-        ->name('admin.conversations.messages.store');
-
-    Route::post('/admin/conversations/{conversation}/close-live-chat', [ConversationController::class, 'closeLiveChat'])
-        ->name('admin.conversations.closeLiveChat');
-    
-    Route::get('/profile', [ProfileController::class, 'edit'])
-    ->middleware('auth')
-    ->name('profile.edit');
+  
 
     Route::get('/admin/websites/{website}/knowledge-sources', [KnowledgeSourceController::class, 'index'])
-    ->name('admin.websites.knowledge-sources.index');
+        ->name('admin.websites.knowledge-sources.index');
 
-    Route::post('/admin/websites/{website}/knowledge-sources',[KnowledgeSourceController::class, 'store'])
-    ->name('admin.websites.knowledge-sources.store');
+    Route::post('/admin/websites/{website}/knowledge-sources', [KnowledgeSourceController::class, 'store'])
+        ->name('admin.websites.knowledge-sources.store');
 
-    Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
-        Route::get('/users/create', [UserManagementController::class, 'create'])->name('users.create');
-        Route::post('/users', [UserManagementController::class, 'store'])->name('users.store');
-        Route::get('/users/{user}/edit', [UserManagementController::class, 'edit'])->name('users.edit');
-        Route::patch('/users/{user}', [UserManagementController::class, 'update'])->name('users.update');
-        Route::post('/users/{user}/suspend', [UserManagementController::class, 'suspend'])->name('users.suspend');
-        Route::post('/users/{user}/activate', [UserManagementController::class, 'activate'])->name('users.activate');
-        Route::delete('/users/{user}', [UserManagementController::class, 'destroy'])->name('users.destroy');
+    
 
-        Route::get('/websites', [WebsiteManagementController::class, 'index'])->name('websites.index');
-        Route::post('/websites/{website}/suspend', [WebsiteManagementController::class, 'suspend'])->name('websites.suspend');
-        Route::post('/websites/{website}/activate', [WebsiteManagementController::class, 'activate'])->name('websites.activate');
-        Route::delete('/websites/{website}', [WebsiteManagementController::class, 'destroy'])->name('websites.destroy');
+    Route::post('/admin/agent/online', [AgentPresenceController::class, 'online'])
+        ->name('admin.agent.online');
+
+    Route::post('/admin/agent/offline', [AgentPresenceController::class, 'offline'])
+        ->name('admin.agent.offline');
+
+
+    Route::get('/profile', [ProfileController::class, 'edit'])
+        ->name('profile.edit');
+
+    Route::patch('/profile', [ProfileController::class, 'update'])
+        ->name('profile.update');
+
+    Route::delete('/profile', [ProfileController::class, 'destroy'])
+        ->name('profile.destroy');
 });
 
 
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-});
-Route::middleware('auth')->post('/websites', [WebsiteController::class, 'store']);
 
-require __DIR__.'/auth.php';
+Route::middleware([
+    'auth',
+    'verified',
+    'active.user',
+    'super.admin',
+])
+    ->prefix('admin/system')
+    ->name('admin.system.')
+    ->group(function () {
+        Route::get('/users', [UserManagementController::class, 'index'])
+            ->name('users.index');
+
+        Route::get('/users/create', [UserManagementController::class, 'create'])
+            ->name('users.create');
+
+        Route::post('/users', [UserManagementController::class, 'store'])
+            ->name('users.store');
+
+        Route::get('/users/{user}/edit', [UserManagementController::class, 'edit'])
+            ->name('users.edit');
+
+        Route::patch('/users/{user}', [UserManagementController::class, 'update'])
+            ->name('users.update');
+
+        Route::post('/users/{user}/suspend', [UserManagementController::class, 'suspend'])
+            ->name('users.suspend');
+
+        Route::post('/users/{user}/activate', [UserManagementController::class, 'activate'])
+            ->name('users.activate');
+
+        Route::delete('/users/{user}', [UserManagementController::class, 'destroy'])
+            ->name('users.destroy');
+
+        Route::get('/websites', [WebsiteManagementController::class, 'index'])
+            ->name('websites.index');
+
+        Route::post('/websites/{website}/suspend', [WebsiteManagementController::class, 'suspend'])
+            ->name('websites.suspend');
+
+        Route::post('/websites/{website}/activate', [WebsiteManagementController::class, 'activate'])
+            ->name('websites.activate');
+
+        Route::delete('/websites/{website}', [WebsiteManagementController::class, 'destroy'])
+            ->name('websites.destroy');
+    });
+
+
+
+Route::middleware('auth')
+    ->post('/websites', [WebsiteController::class, 'store']);
+
+require __DIR__ . '/auth.php';
