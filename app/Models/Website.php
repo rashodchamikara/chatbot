@@ -80,4 +80,9 @@ class Website extends Model
     public function suspendedBy(){
         return $this->belongsTo(\App\Models\User::class, 'suspended_by');
     }
+
+    public function aiAgent()
+    {
+        return $this->belongsTo(AiAgent::class);
+    }
 }
