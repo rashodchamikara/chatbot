@@ -10,6 +10,7 @@ use App\Services\Knowledge\Extraction\PdfTextExtractor;
 use App\Services\Knowledge\Extraction\PlainTextExtractor;
 use App\Services\Knowledge\Extraction\SpreadsheetExtractor;
 use App\Services\Knowledge\Extraction\ImageOcrExtractor;
+use App\Services\Omnichannel\ChannelManager;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -20,30 +21,38 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(
         ExtractorManager::class,
-        function ($app): ExtractorManager {
-            return new ExtractorManager(
-                pdfExtractor: $app->make(
-                    PdfTextExtractor::class
-                ),
+            function ($app): ExtractorManager {
+                return new ExtractorManager(
+                    pdfExtractor: $app->make(
+                        PdfTextExtractor::class
+                    ),
 
-                plainTextExtractor: $app->make(
-                    PlainTextExtractor::class
-                ),
+                    plainTextExtractor: $app->make(
+                        PlainTextExtractor::class
+                    ),
 
-                docxExtractor: $app->make(
-                    DocxExtractor::class
-                ),
+                    docxExtractor: $app->make(
+                        DocxExtractor::class
+                    ),
 
-                spreadsheetExtractor: $app->make(
-                    SpreadsheetExtractor::class
-                ),
+                    spreadsheetExtractor: $app->make(
+                        SpreadsheetExtractor::class
+                    ),
 
-                imageOcrExtractor: $app->make(
-                    ImageOcrExtractor::class
-                )
-            );
-        }
-    );
+                    imageOcrExtractor: $app->make(
+                        ImageOcrExtractor::class
+                    ),
+                    
+                );
+            }
+        
+        );
+        $this->app->singleton(
+            ChannelManager::class,
+            function (): ChannelManager {
+                return new ChannelManager();
+            }
+        );
     }
 
     /**
