@@ -51,10 +51,25 @@ class UserManagementController extends Controller
     public function store(Request $request, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $request->validate([
+            'tenant_mode' => [
+                'required',
+                Rule::in([
+                    'none',
+                    'existing',
+                    'new',
+                ]),
+            ],
+
             'tenant_id' => [
                 'nullable',
                 'integer',
                 Rule::exists('tenants', 'id'),
+            ],
+
+            'new_tenant_name' => [
+                'nullable',
+                'string',
+                'max:255',
             ],
 
             'name' => [
@@ -89,43 +104,104 @@ class UserManagementController extends Controller
 
         if (
             $validated['role'] === User::ROLE_AGENT &&
+            $validated['tenant_mode'] !== 'existing'
+        ) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'tenant_id' => 'Agents must be assigned to an existing tenant.',
+                ]);
+        }
+
+        if (
+            $validated['tenant_mode'] === 'existing' &&
             empty($validated['tenant_id'])
         ) {
             return back()
                 ->withInput()
                 ->withErrors([
-                    'tenant_id' => 'Tenant is required when creating an agent.',
+                    'tenant_id' => 'Please select a tenant.',
                 ]);
         }
 
-        $user = User::create([
-            'tenant_id' => $validated['tenant_id'] ?? null,
-            'name' => $validated['name'],
-            'email' => strtolower(trim($validated['email'])),
-            'password' => $validated['password'],
-            'role' => $validated['role'],
-            'status' => $validated['status'],
-            'suspended_at' => $validated['status'] === User::STATUS_SUSPENDED
-                ? now()
-                : null,
-            'suspended_by' => $validated['status'] === User::STATUS_SUSPENDED
-                ? $request->user()->id
-                : null,
-        ]);
+        if (
+            $validated['tenant_mode'] === 'new' &&
+            empty($validated['new_tenant_name'])
+        ) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'new_tenant_name' => 'Please enter the new tenant name.',
+                ]);
+        }
 
-        $auditLogger->log(
+        $user = DB::transaction(function () use (
             $request,
-            $user->isSuperAdmin() ? 'super_admin.created' : 'user.created',
-            $user,
-            [],
-            $user->only([
-                'tenant_id',
-                'name',
-                'email',
-                'role',
-                'status',
-            ])
-        );
+            $validated,
+            $auditLogger
+        ) {
+            $tenantId = null;
+
+            if ($validated['tenant_mode'] === 'existing') {
+                $tenantId = $validated['tenant_id'];
+            }
+
+            if ($validated['tenant_mode'] === 'new') {
+                $tenant = Tenant::create([
+                    'name' => trim($validated['new_tenant_name']),
+                ]);
+
+                $tenantId = $tenant->id;
+
+                $auditLogger->log(
+                    $request,
+                    'tenant.created',
+                    $tenant,
+                    [],
+                    $tenant->only([
+                        'id',
+                        'name',
+                    ])
+                );
+            }
+
+            $user = User::create([
+                'tenant_id' => $tenantId,
+                'name' => $validated['name'],
+                'email' => strtolower(trim($validated['email'])),
+                'password' => $validated['password'],
+                'role' => $validated['role'],
+                'status' => $validated['status'],
+
+                'suspended_at' =>
+                    $validated['status'] === User::STATUS_SUSPENDED
+                        ? now()
+                        : null,
+
+                'suspended_by' =>
+                    $validated['status'] === User::STATUS_SUSPENDED
+                        ? $request->user()->id
+                        : null,
+            ]);
+
+            $auditLogger->log(
+                $request,
+                $user->isSuperAdmin()
+                    ? 'super_admin.created'
+                    : 'user.created',
+                $user,
+                [],
+                $user->only([
+                    'tenant_id',
+                    'name',
+                    'email',
+                    'role',
+                    'status',
+                ])
+            );
+
+            return $user;
+        });
 
         return redirect()
             ->route('admin.system.users.index')
@@ -145,12 +221,31 @@ class UserManagementController extends Controller
         ]);
     }
 
-    public function update(Request $request, User $user, AuditLogger $auditLogger): RedirectResponse {
+    public function update(
+        Request $request,
+        User $user,
+        AuditLogger $auditLogger
+    ): RedirectResponse {
         $validated = $request->validate([
+            'tenant_mode' => [
+                'required',
+                Rule::in([
+                    'none',
+                    'existing',
+                    'new',
+                ]),
+            ],
+
             'tenant_id' => [
                 'nullable',
                 'integer',
                 Rule::exists('tenants', 'id'),
+            ],
+
+            'new_tenant_name' => [
+                'nullable',
+                'string',
+                'max:255',
             ],
 
             'name' => [
@@ -181,12 +276,34 @@ class UserManagementController extends Controller
 
         if (
             $validated['role'] === User::ROLE_AGENT &&
+            $validated['tenant_mode'] !== 'existing'
+        ) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'tenant_id' => 'Agents must be assigned to an existing tenant.',
+                ]);
+        }
+
+        if (
+            $validated['tenant_mode'] === 'existing' &&
             empty($validated['tenant_id'])
         ) {
             return back()
                 ->withInput()
                 ->withErrors([
-                    'tenant_id' => 'Tenant is required when assigning the agent role.',
+                    'tenant_id' => 'Please select a tenant.',
+                ]);
+        }
+
+        if (
+            $validated['tenant_mode'] === 'new' &&
+            empty($validated['new_tenant_name'])
+        ) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'new_tenant_name' => 'Please enter the new tenant name.',
                 ]);
         }
 
@@ -195,40 +312,72 @@ class UserManagementController extends Controller
             $validated['role']
         );
 
-        $oldValues = $user->only([
-            'tenant_id',
-            'name',
-            'email',
-            'role',
-            'status',
-        ]);
-
-        $payload = [
-            'tenant_id' => $validated['tenant_id'] ?? null,
-            'name' => $validated['name'],
-            'email' => strtolower(trim($validated['email'])),
-            'role' => $validated['role'],
-        ];
-
-        if (filled($validated['password'] ?? null)) {
-            $payload['password'] = $validated['password'];
-        }
-
-        $user->update($payload);
-
-        $auditLogger->log(
+        DB::transaction(function () use (
             $request,
-            'user.updated',
             $user,
-            $oldValues,
-            $user->fresh()->only([
+            $validated,
+            $auditLogger
+        ) {
+            $oldValues = $user->only([
                 'tenant_id',
                 'name',
                 'email',
                 'role',
                 'status',
-            ])
-        );
+            ]);
+
+            $tenantId = null;
+
+            if ($validated['tenant_mode'] === 'existing') {
+                $tenantId = $validated['tenant_id'];
+            }
+
+            if ($validated['tenant_mode'] === 'new') {
+                $tenant = Tenant::create([
+                    'name' => trim($validated['new_tenant_name']),
+                ]);
+
+                $tenantId = $tenant->id;
+
+                $auditLogger->log(
+                    $request,
+                    'tenant.created',
+                    $tenant,
+                    [],
+                    $tenant->only([
+                        'id',
+                        'name',
+                    ])
+                );
+            }
+
+            $payload = [
+                'tenant_id' => $tenantId,
+                'name' => $validated['name'],
+                'email' => strtolower(trim($validated['email'])),
+                'role' => $validated['role'],
+            ];
+
+            if (filled($validated['password'] ?? null)) {
+                $payload['password'] = $validated['password'];
+            }
+
+            $user->update($payload);
+
+            $auditLogger->log(
+                $request,
+                'user.updated',
+                $user,
+                $oldValues,
+                $user->fresh()->only([
+                    'tenant_id',
+                    'name',
+                    'email',
+                    'role',
+                    'status',
+                ])
+            );
+        });
 
         return redirect()
             ->route('admin.system.users.index')
