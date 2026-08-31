@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -29,16 +30,29 @@ class AiAgent extends Model
 
     public function tenant(): BelongsTo
     {
-        return $this->belongsTo(Tenant::class);
+        return $this->belongsTo(
+            Tenant::class
+        );
     }
 
     public function channelConnections(): HasMany
     {
-        return $this->hasMany(ChannelConnection::class);
+        return $this->hasMany(
+            ChannelConnection::class
+        );
     }
 
     public function websites(): HasMany
     {
-        return $this->hasMany(Website::class);
+        return $this->hasMany(
+            Website::class
+        );
+    }
+
+    public function conversations(): HasMany
+    {
+        return $this->hasMany(
+            Conversation::class
+        );
     }
 }

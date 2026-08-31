@@ -11,25 +11,18 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use App\Events\OmnichannelMessageChanged;
+
 
 class InboundMessageService
 {
-    /**
-     * Process one normalized inbound message.
-     *
-     * Every external channel should eventually pass its
-     * normalized inbound messages through this method.
-     */
+
     public function handle(
         InboundMessageData $data
     ): Message {
-        return DB::transaction(function () use ($data): Message {
+        $message = DB::transaction(
+        function () use ($data): Message {
 
-            /*
-            |--------------------------------------------------------------------------
-            | 1. Resolve and validate the channel connection
-            |--------------------------------------------------------------------------
-            */
 
             $connection = ChannelConnection::query()
                 ->whereKey($data->channelConnectionId)
@@ -45,16 +38,6 @@ class InboundMessageService
                 );
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | 2. Idempotency / duplicate protection
-            |--------------------------------------------------------------------------
-            |
-            | Providers can send the same webhook more than once.
-            |
-            | Never create the same provider message twice.
-            |
-            */
 
             $existingMessage = Message::query()
                 ->where(
@@ -71,22 +54,13 @@ class InboundMessageService
                 return $existingMessage;
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | 3. Resolve customer/contact
-            |--------------------------------------------------------------------------
-            */
 
             $contact = $this->resolveContact(
                 connection: $connection,
                 data: $data
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | 4. Resolve conversation
-            |--------------------------------------------------------------------------
-            */
+           
 
             $conversation = $this->resolveConversation(
                 connection: $connection,
@@ -94,11 +68,7 @@ class InboundMessageService
                 data: $data
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | 5. Store inbound message
-            |--------------------------------------------------------------------------
-            */
+            
 
             $message = new Message();
 
@@ -115,20 +85,16 @@ class InboundMessageService
                 'inbound';
 
             $message->sender_type =
-                'contact';
+                'customer';
 
             $message->message_type =
                 $data->messageType;
 
-            /*
-             * Existing AI Sales Agent message body column.
-             */
+            
             $message->message =
                 $data->text ?? '';
 
-            /*
-             * Keep provider/channel-specific data separately.
-             */
+            
             $message->payload = [
                 'external_contact_id' =>
                     $data->externalContactId,
@@ -148,22 +114,14 @@ class InboundMessageService
 
             $message->save();
 
-            /*
-            |--------------------------------------------------------------------------
-            | 6. Store attachment metadata
-            |--------------------------------------------------------------------------
-            */
+           
 
             $this->storeAttachments(
                 message: $message,
                 attachments: $data->attachments
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | 7. Update conversation inbox state
-            |--------------------------------------------------------------------------
-            */
+           
 
             $now = now();
 
@@ -178,23 +136,34 @@ class InboundMessageService
 
             $conversation->save();
 
-            return $message;
-        });
+             return $message;
+        }
+            );
+
+           
+
+            if ($message->wasRecentlyCreated) {
+            $message->refresh();
+
+            $message->load(
+                'conversation'
+            );
+
+            OmnichannelMessageChanged::dispatch(
+                $message,
+                'created'
+            );
+        }
+
+        return $message;
     }
 
-    /**
-     * Resolve the internal contact represented by
-     * the provider/channel identity.
-     */
+    
     protected function resolveContact(
         ChannelConnection $connection,
         InboundMessageData $data
     ): Contact {
-        /*
-        |--------------------------------------------------------------------------
-        | First preference: existing channel identity
-        |--------------------------------------------------------------------------
-        */
+       
 
         $identity = ContactIdentity::query()
             ->where(
@@ -230,11 +199,6 @@ class InboundMessageService
             return $contact;
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Second preference: known email
-        |--------------------------------------------------------------------------
-        */
 
         $contact = null;
 
@@ -533,13 +497,6 @@ class InboundMessageService
 
         return $conversation;
     }
-
-    /**
-     * Store normalized attachment references.
-     *
-     * Actual remote file downloading/storage can happen
-     * asynchronously later.
-     */
     protected function storeAttachments(
         Message $message,
         array $attachments

@@ -11,9 +11,6 @@ class ChannelManager
    
     protected array $adapters = [];
 
-    /**
-     * Register a channel adapter.
-     */
     public function register(ChannelAdapter $adapter): void
     {
         $type = strtolower(trim($adapter->type()));
@@ -41,18 +38,13 @@ class ChannelManager
         return $this->adapters[$type];
     }
 
-    /**
-     * Resolve the adapter for a ChannelConnection.
-     */
     public function forConnection(
         ChannelConnection $connection
     ): ChannelAdapter {
         return $this->driver($connection->type);
     }
 
-    /**
-     * Check whether an adapter has been registered.
-     */
+
     public function has(string $type): bool
     {
         return isset(
@@ -62,11 +54,7 @@ class ChannelManager
         );
     }
 
-    /**
-     * Return all registered adapter types.
-     *
-     * @return array<int, string>
-     */
+ 
     public function registeredTypes(): array
     {
         return array_keys($this->adapters);

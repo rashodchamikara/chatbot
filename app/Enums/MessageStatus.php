@@ -4,6 +4,7 @@ namespace App\Enums;
 
 enum MessageStatus: string
 {
+    case Received = 'received';
     case Pending = 'pending';
     case Queued = 'queued';
     case Accepted = 'accepted';

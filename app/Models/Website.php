@@ -4,8 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class Website extends Model
 {
@@ -14,21 +16,31 @@ class Website extends Model
 
     protected $fillable = [
         'tenant_id',
+        'ai_agent_id',
+
         'name',
+
         'chatbot_name',
         'chatbot_theme',
         'chatbot_avatar',
         'chatbot_instructions',
+
         'domain',
         'verify_domain',
+
         'embed_token',
+
         'is_active',
+
         'indexing_status',
         'indexing_started_at',
         'indexing_completed_at',
         'indexing_error',
+
         'realtime_token',
+
         'live_chat_enabled',
+
         'suspended_at',
         'suspended_by',
     ];
@@ -36,53 +48,90 @@ class Website extends Model
     protected $casts = [
         'verify_domain' => 'boolean',
         'is_active' => 'boolean',
+
         'indexing_started_at' => 'datetime',
         'indexing_completed_at' => 'datetime',
+
         'live_chat_enabled' => 'boolean',
+
         'suspended_at' => 'datetime',
     ];
 
-    public function tenant()
+    public function tenant(): BelongsTo
     {
-        return $this->belongsTo(Tenant::class);
+        return $this->belongsTo(
+            Tenant::class
+        );
     }
 
-    public function knowledgePages()
+    public function aiAgent(): BelongsTo
     {
-        return $this->hasMany(KnowledgePage::class);
+        return $this->belongsTo(
+            AiAgent::class
+        );
     }
 
-    public function knowledgeChunks()
+    public function knowledgePages(): HasMany
     {
-        return $this->hasMany(KnowledgeChunk::class);
+        return $this->hasMany(
+            KnowledgePage::class
+        );
     }
-    public function conversations()
+
+    public function knowledgeChunks(): HasMany
     {
-        return $this->hasMany(Conversation::class);
+        return $this->hasMany(
+            KnowledgeChunk::class
+        );
     }
-    public function leads()
+
+    public function conversations(): HasMany
     {
-        return $this->hasMany(Lead::class);
+        return $this->hasMany(
+            Conversation::class
+        );
     }
+
+    public function leads(): HasMany
+    {
+        return $this->hasMany(
+            Lead::class
+        );
+    }
+
+    public function knowledgeSources(): HasMany
+    {
+        return $this->hasMany(
+            KnowledgeSource::class
+        );
+    }
+
+    public function channelConnections(): HasMany
+    {
+        return $this->hasMany(
+            ChannelConnection::class
+        );
+    }
+
+    public function suspendedBy(): BelongsTo
+    {
+        return $this->belongsTo(
+            User::class,
+            'suspended_by'
+        );
+    }
+
     protected static function booted(): void
     {
-        static::creating(function ($website) {
-            if (!$website->realtime_token) {
-                $website->realtime_token = Str::random(64);
+        static::creating(
+            function (
+                Website $website
+            ): void {
+                if (!$website->realtime_token) {
+                    $website->realtime_token =
+                        Str::random(64);
+                }
             }
-        });
-    }
-    public function knowledgeSources()
-    {
-        return $this->hasMany(KnowledgeSource::class);
-    }
-
-    public function suspendedBy(){
-        return $this->belongsTo(\App\Models\User::class, 'suspended_by');
-    }
-
-    public function aiAgent()
-    {
-        return $this->belongsTo(AiAgent::class);
+        );
     }
 }
