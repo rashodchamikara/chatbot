@@ -9,6 +9,7 @@ use App\Models\ContactIdentity;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
@@ -35,7 +36,10 @@ class OutboundMessageService
         |--------------------------------------------------------------------------
         */
 
-        if (!$conversation->channel_connection_id) {
+        if (
+            !$conversation
+                ->channel_connection_id
+        ) {
             throw new RuntimeException(
                 'Conversation does not have a channel connection.'
             );
@@ -49,7 +53,7 @@ class OutboundMessageService
 
         /*
         |--------------------------------------------------------------------------
-        | Load channel connection
+        | Resolve channel connection
         |--------------------------------------------------------------------------
         */
 
@@ -58,7 +62,8 @@ class OutboundMessageService
         );
 
         $connection =
-            $conversation->channelConnection;
+            $conversation
+                ->channelConnection;
 
         if (!$connection) {
             throw new RuntimeException(
@@ -68,12 +73,13 @@ class OutboundMessageService
 
         /*
         |--------------------------------------------------------------------------
-        | Tenant isolation
+        | Tenant boundary validation
         |--------------------------------------------------------------------------
         */
 
         if (
-            (int) $conversation->tenant_id !==
+            (int) $conversation->tenant_id
+            !==
             (int) $connection->tenant_id
         ) {
             throw new RuntimeException(
@@ -83,24 +89,25 @@ class OutboundMessageService
 
         /*
         |--------------------------------------------------------------------------
-        | Resolve provider identity
+        | Resolve provider contact identity
         |--------------------------------------------------------------------------
         */
 
-        $identity = ContactIdentity::query()
-            ->where(
-                'tenant_id',
-                $conversation->tenant_id
-            )
-            ->where(
-                'contact_id',
-                $conversation->contact_id
-            )
-            ->where(
-                'channel_connection_id',
-                $connection->id
-            )
-            ->first();
+        $identity =
+            ContactIdentity::query()
+                ->where(
+                    'tenant_id',
+                    $conversation->tenant_id
+                )
+                ->where(
+                    'contact_id',
+                    $conversation->contact_id
+                )
+                ->where(
+                    'channel_connection_id',
+                    $connection->id
+                )
+                ->first();
 
         if (!$identity) {
             throw new RuntimeException(
@@ -110,157 +117,184 @@ class OutboundMessageService
 
         /*
         |--------------------------------------------------------------------------
-        | Save local pending message
+        | Persist pending outbound message
         |--------------------------------------------------------------------------
         */
 
-        $message = DB::transaction(
-            function () use (
-                $conversation,
-                $connection,
-                $body,
-                $senderType,
-                $senderUserId,
-                $isAiGenerated,
-                $attachments,
-                $metadata,
-                $replyToExternalId
-            ): Message {
-                $message = new Message();
+        $message =
+            DB::transaction(
+                function () use (
+                    $conversation,
+                    $connection,
+                    $body,
+                    $senderType,
+                    $senderUserId,
+                    $isAiGenerated,
+                    $attachments,
+                    $metadata,
+                    $replyToExternalId
+                ): Message {
+                    $message =
+                        new Message();
 
-                $message->conversation_id =
-                    $conversation->id;
+                    $message->conversation_id =
+                        $conversation->id;
 
-                $message->channel_connection_id =
-                    $connection->id;
+                    $message
+                        ->channel_connection_id =
+                        $connection->id;
 
-                $message->direction =
-                    'outbound';
+                    $message->direction =
+                        'outbound';
 
-                $message->sender_type =
-                    $senderType;
+                    $message->sender_type =
+                        $senderType;
 
-                $message->message_type =
-                    empty($attachments)
-                        ? 'text'
-                        : 'attachment';
+                    $message->message_type =
+                        empty($attachments)
+                            ? 'text'
+                            : 'attachment';
 
-                $message->message =
-                    $body;
+                    $message->message =
+                        $body;
 
-                $message->status =
-                    'pending';
+                    $message
+                        ->is_ai_generated =
+                        $isAiGenerated;
 
-                $message->is_ai_generated =
-                    $isAiGenerated;
+                    /*
+                     * The frontend should see the message
+                     * immediately even before the provider
+                     * confirms delivery.
+                     */
+                    $message->status =
+                        'pending';
 
-                if ($senderUserId !== null) {
-                    $message->sender_user_id =
-                        $senderUserId;
+                    if (
+                        $senderUserId !== null
+                    ) {
+                        $message
+                            ->sender_user_id =
+                            $senderUserId;
+                    }
+
+                    if (
+                        $replyToExternalId
+                        !== null
+                    ) {
+                        $message
+                            ->external_reply_to_id =
+                            $replyToExternalId;
+                    }
+
+                    $message->payload = [
+                        'attachments' =>
+                            $attachments,
+
+                        'metadata' =>
+                            $metadata,
+                    ];
+
+                    $message->save();
+
+                    return $message;
                 }
-
-                if ($replyToExternalId !== null) {
-                    $message->external_reply_to_id =
-                        $replyToExternalId;
-                }
-
-                $message->payload = [
-                    'attachments' =>
-                        $attachments,
-
-                    'metadata' =>
-                        $metadata,
-                ];
-
-                $message->save();
-
-                return $message;
-            }
-        );
+            );
 
         /*
         |--------------------------------------------------------------------------
         | Broadcast pending message
         |--------------------------------------------------------------------------
+        |
+        | The inbox can immediately show:
+        |
+        | "Hello"
+        | Sending...
+        |
         */
 
-        $message->load(
-            'conversation'
-        );
+        $this->broadcastMessageChange(
+            message:
+                $message,
 
-        OmnichannelMessageChanged::dispatch(
-            $message,
-            'created'
+            changeType:
+                'created'
         );
 
         /*
         |--------------------------------------------------------------------------
-        | Build the actual DTO used by your project
+        | Build adapter-neutral outbound DTO
         |--------------------------------------------------------------------------
         */
 
-        $outbound = new OutboundMessageData(
-            tenantId:
-                (int) $conversation->tenant_id,
+        $outbound =
+            new OutboundMessageData(
+                externalUserId:
+                    $identity
+                        ->external_user_id,
 
-            conversationId:
-                (int) $conversation->id,
+                externalThreadId:
+                    $conversation
+                        ->external_thread_id,
 
-            channelConnectionId:
-                (int) $connection->id,
+                type:
+                    $message
+                        ->message_type,
 
-            externalContactId:
-                (string) $identity->external_user_id,
+                body:
+                    $body,
 
-            externalThreadId:
-                $conversation->external_thread_id,
+                attachments:
+                    $attachments,
 
-            messageType:
-                $message->message_type,
+                metadata:
+                    array_merge(
+                        $metadata,
+                        [
+                            'conversation_id' =>
+                                $conversation->id,
 
-            text:
-                $body,
+                            'message_id' =>
+                                $message->id,
+                        ]
+                    ),
 
-            attachments:
-                $attachments,
-
-            metadata:
-                array_merge(
-                    $metadata,
-                    [
-                        'message_id' =>
-                            $message->id,
-
-                        'reply_to_external_id' =>
-                            $replyToExternalId,
-                    ]
-                ),
-        );
+                replyToExternalId:
+                    $replyToExternalId,
+            );
 
         try {
             /*
             |--------------------------------------------------------------------------
-            | Resolve correct adapter
+            | Resolve adapter
             |--------------------------------------------------------------------------
+            |
+            | ChannelManager decides which adapter handles
+            | this ChannelConnection.
+            |
             */
 
             $adapter =
-                $this->channelManager->forConnection(
-                    $connection
-                );
+                $this->channelManager
+                    ->forConnection(
+                        $connection
+                    );
 
             /*
             |--------------------------------------------------------------------------
-            | Send
+            | Provider send
             |--------------------------------------------------------------------------
             */
 
-            $result = $adapter->send(
-                $connection,
-                $outbound
-            );
+            $result =
+                $adapter->send(
+                    $connection,
+                    $outbound
+                );
 
-            if (!$result instanceof SendResult) {
+            if (
+                !$result instanceof SendResult
+            ) {
                 throw new RuntimeException(
                     'Channel adapter returned an invalid send result.'
                 );
@@ -268,30 +302,7 @@ class OutboundMessageService
 
             /*
             |--------------------------------------------------------------------------
-            | Provider returned a failure
-            |--------------------------------------------------------------------------
-            */
-
-            if (!$result->successful) {
-                $error =
-                    $result->errorMessage
-                    ?: 'The channel provider rejected the message.';
-
-                if ($result->errorCode) {
-                    $error .=
-                        ' [' .
-                        $result->errorCode .
-                        ']';
-                }
-
-                throw new RuntimeException(
-                    $error
-                );
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | Mark message as sent
+            | Persist provider result
             |--------------------------------------------------------------------------
             */
 
@@ -301,33 +312,70 @@ class OutboundMessageService
                     $conversation,
                     $result
                 ): void {
-                    $message->external_message_id =
-                        $result->externalMessageId;
+                    $message
+                        ->external_message_id =
+                        $result
+                            ->externalMessageId;
 
                     $message->status =
-                        'sent';
-
-                    $message->sent_at =
-                        now();
+                        $result->status;
 
                     $payload =
-                        is_array($message->payload)
+                        is_array(
+                            $message->payload
+                        )
                             ? $message->payload
                             : [];
 
-                    $payload['provider_metadata'] =
-                        $result->metadata;
+                    /*
+                     * Keep the raw provider response in
+                     * storage for diagnostics.
+                     *
+                     * It is intentionally NOT broadcast
+                     * to browsers.
+                     */
+                    $payload[
+                        'provider_response'
+                    ] =
+                        $result->rawResponse;
 
                     $message->payload =
                         $payload;
 
+                    if (
+                        in_array(
+                            $result->status,
+                            [
+                                'sent',
+                                'delivered',
+                                'success',
+                            ],
+                            true
+                        )
+                    ) {
+                        $message->sent_at =
+                            now();
+                    }
+
                     $message->save();
 
-                    $conversation->last_message_at =
+                    /*
+                     * Update conversation activity.
+                     */
+                    $conversation
+                        ->last_message_at =
                         now();
 
-                    if (!$conversation->first_response_at) {
-                        $conversation->first_response_at =
+                    /*
+                     * First response measures how long it
+                     * took the business/AI to respond.
+                     */
+                    if (
+                        !$conversation
+                            ->first_response_at
+                    ) {
+                        $conversation
+                            ->first_response_at =
                             now();
                     }
 
@@ -335,12 +383,64 @@ class OutboundMessageService
                 }
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | Broadcast sent status
-            |--------------------------------------------------------------------------
-            */
+            
 
+            $this->broadcastMessageChange(
+                message:
+                    $message,
+
+                changeType:
+                    'status_updated'
+            );
+
+            return $message->fresh();
+        } catch (Throwable $exception) {
+            
+
+            $message->status =
+                'failed';
+
+            $payload =
+                is_array(
+                    $message->payload
+                )
+                    ? $message->payload
+                    : [];
+
+            $payload['send_error'] = [
+                'message' =>
+                    $exception
+                        ->getMessage(),
+
+                'failed_at' =>
+                    now()
+                        ->toIso8601String(),
+            ];
+
+            $message->payload =
+                $payload;
+
+            $message->save();
+
+            
+
+            $this->broadcastMessageChange(
+                message:
+                    $message,
+
+                changeType:
+                    'status_updated'
+            );
+
+            throw $exception;
+        }
+    }
+
+    protected function broadcastMessageChange(
+        Message $message,
+        string $changeType
+    ): void {
+        try {
             $message->refresh();
 
             $message->load(
@@ -349,54 +449,23 @@ class OutboundMessageService
 
             OmnichannelMessageChanged::dispatch(
                 $message,
-                'status_updated'
+                $changeType
             );
-
-            return $message;
         } catch (Throwable $exception) {
-            /*
-            |--------------------------------------------------------------------------
-            | Preserve failed message
-            |--------------------------------------------------------------------------
-            */
+            Log::warning(
+                'Omnichannel realtime broadcast failed.',
+                [
+                    'message_id' =>
+                        $message->id,
 
-            $message->status =
-                'failed';
+                    'change_type' =>
+                        $changeType,
 
-            $payload =
-                is_array($message->payload)
-                    ? $message->payload
-                    : [];
-
-            $payload['send_error'] = [
-                'message' =>
-                    $exception->getMessage(),
-
-                'failed_at' =>
-                    now()->toIso8601String(),
-            ];
-
-            $message->payload =
-                $payload;
-
-            $message->save();
-
-            /*
-            |--------------------------------------------------------------------------
-            | Broadcast failure
-            |--------------------------------------------------------------------------
-            */
-
-            $message->load(
-                'conversation'
+                    'error' =>
+                        $exception
+                            ->getMessage(),
+                ]
             );
-
-            OmnichannelMessageChanged::dispatch(
-                $message,
-                'status_updated'
-            );
-
-            throw $exception;
         }
     }
 }

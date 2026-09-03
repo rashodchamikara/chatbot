@@ -7,11 +7,63 @@ use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::channel(
     'App.Models.User.{id}',
-    function (User $user, int $id): bool {
+    function ($user, $id): bool {
         return (int) $user->id ===
             (int) $id;
     }
 );
+
+
+$canAccessTenant =
+    static function (
+        $user,
+        $tenantId
+    ): bool {
+        /*
+         * Reject suspended/inactive users.
+         */
+        if (
+            isset($user->status) &&
+            $user->status !== 'active'
+        ) {
+            return false;
+        }
+
+        /*
+         * Prefer the model helper if available.
+         */
+        if (
+            method_exists(
+                $user,
+                'isSuperAdmin'
+            ) &&
+            $user->isSuperAdmin()
+        ) {
+            return true;
+        }
+
+        /*
+         * Fallback for installations where the
+         * helper has not yet been added.
+         */
+        if (
+            ($user->role ?? null) ===
+            'super_admin'
+        ) {
+            return true;
+        }
+
+        /*
+         * Normal tenant users can only access
+         * their own tenant.
+         */
+        if ($user->tenant_id === null) {
+            return false;
+        }
+
+        return (int) $user->tenant_id ===
+            (int) $tenantId;
+    };
 
 
 Broadcast::channel(
@@ -20,11 +72,22 @@ Broadcast::channel(
         User $user,
         int $tenantId
     ): bool {
-        if ($user->isSuperAdmin()) {
+        /*
+         * Super admins may inspect every tenant.
+         */
+        if (
+            method_exists(
+                $user,
+                'isSuperAdmin'
+            )
+            &&
+            $user->isSuperAdmin()
+        ) {
             return true;
         }
 
-        return (int) $user->tenant_id ===
+        return (int) $user->tenant_id
+            ===
             (int) $tenantId;
     }
 );
@@ -37,29 +100,38 @@ Broadcast::channel(
         int $tenantId,
         int $conversationId
     ): bool {
-        
-        $conversationExists =
-            Conversation::query()
-                ->whereKey(
-                    $conversationId
+        /*
+         * First validate user tenant access.
+         */
+        $hasTenantAccess =
+            (
+                method_exists(
+                    $user,
+                    'isSuperAdmin'
                 )
-                ->where(
-                    'tenant_id',
-                    $tenantId
-                )
-                ->exists();
+                &&
+                $user->isSuperAdmin()
+            )
+            ||
+            (
+                (int) $user->tenant_id
+                ===
+                (int) $tenantId
+            );
 
-        if (!$conversationExists) {
+        if (!$hasTenantAccess) {
             return false;
         }
 
-        
-        if ($user->isSuperAdmin()) {
-            return true;
-        }
-
-        
-        return (int) $user->tenant_id ===
-            (int) $tenantId;
+       
+        return Conversation::query()
+            ->whereKey(
+                $conversationId
+            )
+            ->where(
+                'tenant_id',
+                $tenantId
+            )
+            ->exists();
     }
 );

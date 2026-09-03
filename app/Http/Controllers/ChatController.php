@@ -5,36 +5,53 @@ namespace App\Http\Controllers;
 use App\Events\ConversationMessageCreated;
 use App\Events\ConversationModeChanged;
 use App\Events\LiveAgentRequested;
+use App\Events\OmnichannelMessageChanged;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\Website;
 use App\Services\AgentAvailabilityService;
+use App\Services\Knowledge\KnowledgeContextBuilder;
+use App\Services\Knowledge\KnowledgeRetriever;
 use App\Services\LeadCaptureService;
+use App\Services\Omnichannel\ChannelManager;
+use App\Services\Omnichannel\InboundMessageService;
+use App\Services\Omnichannel\OutboundMessageService;
+use App\Services\Omnichannel\WebsiteConversationResolver;
 use App\Services\SalesBrainService;
+use App\Support\Omnichannel\WebsiteIdentity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Services\Knowledge\KnowledgeContextBuilder;
-use App\Services\Knowledge\KnowledgeRetriever;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
+use Throwable;
 
 class ChatController extends Controller
 {
-
     public function __construct(
-    private readonly KnowledgeRetriever $knowledgeRetriever,
-    private readonly KnowledgeContextBuilder $contextBuilder
+        private readonly KnowledgeRetriever $knowledgeRetriever,
+        private readonly KnowledgeContextBuilder $contextBuilder,
+        private readonly ChannelManager $channelManager,
+        private readonly InboundMessageService $inboundMessageService,
+        private readonly OutboundMessageService $outboundMessageService,
+        private readonly WebsiteConversationResolver $websiteConversationResolver,
     ) {
     }
 
+    /**
+     * Handle a message sent from the website widget.
+     */
     public function message(
         Request $request,
         SalesBrainService $brain,
-        LeadCaptureService $leadCaptureService,
-        KnowledgeRetriever $knowledgeRetriever,
-        KnowledgeContextBuilder $knowledgeContextBuilder
+        LeadCaptureService $leadCaptureService
     ): JsonResponse {
         /*
-        * Validate the visitor message.
+        |--------------------------------------------------------------------------
+        | Validate widget request
+        |--------------------------------------------------------------------------
         */
+
         $validated = $request->validate([
             'message' => [
                 'required',
@@ -47,12 +64,29 @@ class ChatController extends Controller
                 'string',
                 'max:255',
             ],
+
+            /*
+             * Optional for backwards compatibility.
+             *
+             * Existing widget versions do not need to send this.
+             * Future versions can send it for stronger idempotency.
+             */
+            'client_message_id' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
         ]);
 
         /*
-        * Resolve the website using your existing embed-token logic.
+        |--------------------------------------------------------------------------
+        | Resolve Website from embed-token middleware
+        |--------------------------------------------------------------------------
         */
-        $website = $this->resolveWebsite($request);
+
+        $website = $this->resolveWebsite(
+            $request
+        );
 
         if (!$website) {
             return response()->json([
@@ -62,105 +96,242 @@ class ChatController extends Controller
         }
 
         /*
-        * Find the existing conversation or create one.
+        |--------------------------------------------------------------------------
+        | Resolve Website omnichannel conversation
+        |--------------------------------------------------------------------------
+        |
+        | This ensures:
+        |
+        | Website
+        |   -> AI Agent
+        |   -> ChannelConnection
+        |   -> Contact
+        |   -> ContactIdentity
+        |   -> Conversation
+        |
+        | Legacy visitor_id and website_id are preserved.
+        |--------------------------------------------------------------------------
         */
-        $conversation = Conversation::firstOrCreate(
-            [
-                'website_id' => $website->id,
-                'visitor_id' => $validated['visitor_id'],
-            ],
-            [
-                'status' => 'active',
-                'mode' => 'ai',
-                'lead_stage' => 'discovery',
-            ]
-        );
 
-        /*
-        * Older conversation records may not have a mode.
-        */
-        if (!$conversation->mode) {
-            $conversation->forceFill([
-                'mode' => 'ai',
-            ])->save();
+        try {
+            $conversation =
+                $this
+                    ->websiteConversationResolver
+                    ->resolve(
+                        $website,
+                        $validated['visitor_id']
+                    );
+
+            $conversation->load(
+                'channelConnection'
+            );
+
+            $connection =
+                $conversation->channelConnection;
+
+            if (!$connection) {
+                throw new RuntimeException(
+                    'Website channel connection could not be resolved.'
+                );
+            }
+        } catch (RuntimeException $exception) {
+            Log::error(
+                'Website omnichannel conversation resolution failed.',
+                [
+                    'website_id' =>
+                        $website->id,
+
+                    'visitor_id' =>
+                        $validated['visitor_id'],
+
+                    'error' =>
+                        $exception->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'message' =>
+                    $exception->getMessage(),
+            ], 409);
         }
 
         /*
-        * Load previous conversation history.
-        *
-        * This happens before saving the current message so the
-        * current visitor message is not sent to the AI twice.
+        |--------------------------------------------------------------------------
+        | Build conversation history
+        |--------------------------------------------------------------------------
+        |
+        | We build history BEFORE saving the current visitor message.
+        |--------------------------------------------------------------------------
         */
-        $history = Message::query()
-            ->where(
-                'conversation_id',
-                $conversation->id
-            )
-            ->where('is_system', false)
-            ->whereIn('sender', [
-                'visitor',
-                'ai',
-                'agent',
-            ])
-            ->latest('id')
-            ->limit(10)
-            ->get()
-            ->reverse()
-            ->map(function (Message $message): array {
-                return [
-                    'role' =>
-                        $message->sender === 'visitor'
-                            ? 'user'
-                            : 'assistant',
 
-                    'content' => $message->message,
-                ];
-            })
-            ->values()
-            ->toArray();
+        $history =
+            Message::query()
+                ->where(
+                    'conversation_id',
+                    $conversation->id
+                )
+                ->where(
+                    'is_system',
+                    false
+                )
+                ->whereIn(
+                    'sender',
+                    [
+                        'visitor',
+                        'ai',
+                        'agent',
+                    ]
+                )
+                ->latest('id')
+                ->limit(10)
+                ->get()
+                ->reverse()
+                ->map(
+                    function (
+                        Message $message
+                    ): array {
+                        return [
+                            'role' =>
+                                $message->sender === 'visitor'
+                                    ? 'user'
+                                    : 'assistant',
+
+                            'content' =>
+                                $message->message,
+                        ];
+                    }
+                )
+                ->values()
+                ->toArray();
 
         /*
-        * Save the current visitor message.
+        |--------------------------------------------------------------------------
+        | Resolve WebsiteAdapter
+        |--------------------------------------------------------------------------
         */
-        $visitorMessage = Message::create([
-            'conversation_id' => $conversation->id,
-            'user_id' => null,
-            'sender' => 'visitor',
-            'is_system' => false,
-            'message' => trim(
-                $validated['message']
-            ),
-        ]);
 
-        $conversation->touch();
+        $adapter =
+            $this
+                ->channelManager
+                ->forConnection(
+                    $connection
+                );
 
-        broadcast(
-            new ConversationMessageCreated(
-                $visitorMessage
-            )
+        /*
+        |--------------------------------------------------------------------------
+        | Normalize incoming widget request
+        |--------------------------------------------------------------------------
+        */
+
+        $inbound =
+            $adapter->parseInbound(
+                $connection,
+                $request
+            );
+
+        if (!$inbound) {
+            return response()->json([
+                'message' =>
+                    'The website message could not be normalized.',
+            ], 422);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Check whether provider/client message already exists
+        |--------------------------------------------------------------------------
+        |
+        | InboundMessageService itself performs idempotency.
+        |
+        | We separately check here because the old website widget Reverb event
+        | should only be broadcast for genuinely new visitor messages.
+        |--------------------------------------------------------------------------
+        */
+
+        $alreadyExists =
+            Message::query()
+                ->where(
+                    'channel_connection_id',
+                    $connection->id
+                )
+                ->where(
+                    'external_message_id',
+                    $inbound->externalMessageId
+                )
+                ->exists();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Persist inbound message through common omnichannel service
+        |--------------------------------------------------------------------------
+        */
+
+        $visitorMessage =
+            $this
+                ->inboundMessageService
+                ->handle(
+                    $inbound
+                );
+
+        $visitorMessage->load(
+            'conversation'
         );
 
+        $conversation =
+            $visitorMessage->conversation;
+
         /*
-        * Refresh in case conversation mode was changed
-        * by a live agent or another process.
+        |--------------------------------------------------------------------------
+        | Preserve existing website Reverb event
+        |--------------------------------------------------------------------------
+        |
+        | Existing widget/live-agent frontend already understands
+        | ConversationMessageCreated.
+        |--------------------------------------------------------------------------
         */
+
+        if (!$alreadyExists) {
+            broadcast(
+                new ConversationMessageCreated(
+                    $visitorMessage
+                )
+            );
+        }
+
         $conversation->refresh();
 
         /*
-        * Do not generate an AI response during live-agent mode.
+        |--------------------------------------------------------------------------
+        | Live-agent mode
+        |--------------------------------------------------------------------------
+        |
+        | When the conversation is waiting for or currently handled by
+        | a human agent, AI must not generate another reply.
+        |--------------------------------------------------------------------------
         */
+
         if (
             in_array(
                 $conversation->mode,
-                ['live_waiting', 'live'],
+                [
+                    'live_waiting',
+                    'live',
+                ],
                 true
             )
         ) {
             return response()->json([
-                'success' => true,
-                'reply' => null,
-                'reply_message' => null,
-                'mode' => $conversation->mode,
+                'success' =>
+                    true,
+
+                'reply' =>
+                    null,
+
+                'reply_message' =>
+                    null,
+
+                'mode' =>
+                    $conversation->mode,
 
                 'conversation_id' =>
                     $conversation->id,
@@ -178,16 +349,22 @@ class ChatController extends Controller
         }
 
         /*
-        * Process lead capture information.
+        |--------------------------------------------------------------------------
+        | Lead capture
+        |--------------------------------------------------------------------------
         */
-        $leadResult =
-            $leadCaptureService->processMessage(
-                $website,
-                $conversation,
-                $validated['message']
-            );
 
-        $lead = $leadResult['lead'] ?? null;
+        $leadResult =
+            $leadCaptureService
+                ->processMessage(
+                    $website,
+                    $conversation,
+                    $validated['message']
+                );
+
+        $lead =
+            $leadResult['lead']
+            ?? null;
 
         $leadStage =
             $leadResult['lead_stage']
@@ -199,15 +376,11 @@ class ChatController extends Controller
             ?? null;
 
         /*
-        * Retrieve matching chunks from:
-        *
-        * 1. Existing crawled URLs
-        * 2. Uploaded documents
-        *
-        * IMPORTANT:
-        * Use $knowledgeRetriever, not $this->knowledgeRetriever,
-        * because it was injected into this method.
+        |--------------------------------------------------------------------------
+        | Knowledge retrieval
+        |--------------------------------------------------------------------------
         */
+
         $knowledgeResults = [];
 
         $knowledgeContext =
@@ -215,28 +388,28 @@ class ChatController extends Controller
 
         try {
             $knowledgeResults =
-                $knowledgeRetriever->retrieve(
-                    $website,
-                    $validated['message']
-                );
+                $this
+                    ->knowledgeRetriever
+                    ->retrieve(
+                        $website,
+                        $validated['message']
+                    );
 
-            /*
-            * Convert the selected chunks into readable text
-            * that can be included in the AI system prompt.
-            */
             $knowledgeContext =
-                $knowledgeContextBuilder->build(
-                    $knowledgeResults
-                );
-        } catch (\Throwable $exception) {
+                $this
+                    ->contextBuilder
+                    ->build(
+                        $knowledgeResults
+                    );
+        } catch (Throwable $exception) {
             /*
-            * Retrieval failure should not completely stop
-            * the chatbot.
-            */
-            \Log::error(
+             * Chat should continue even when knowledge retrieval fails.
+             */
+            Log::error(
                 'Knowledge retrieval failed.',
                 [
-                    'website_id' => $website->id,
+                    'website_id' =>
+                        $website->id,
 
                     'conversation_id' =>
                         $conversation->id,
@@ -248,22 +421,59 @@ class ChatController extends Controller
         }
 
         /*
-        * Generate the AI response.
-        *
-        * The final parameter is the newly retrieved
-        * knowledge context.
+        |--------------------------------------------------------------------------
+        | Generate AI response
+        |--------------------------------------------------------------------------
         */
-        $aiText = $brain->analyze(
-            $validated['message'],
-            $website,
-            $history,
-            $lead,
-            $leadStage,
-            $nextLeadQuestion,
-            $knowledgeContext
-        );
 
-        $aiText = trim((string) $aiText);
+        try {
+            $aiText =
+                $brain->analyze(
+                    $validated['message'],
+                    $website,
+                    $history,
+                    $lead,
+                    $leadStage,
+                    $nextLeadQuestion,
+                    $knowledgeContext
+                );
+        } catch (Throwable $exception) {
+            Log::error(
+                'AI response generation failed.',
+                [
+                    'website_id' =>
+                        $website->id,
+
+                    'conversation_id' =>
+                        $conversation->id,
+
+                    'error' =>
+                        $exception->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'success' =>
+                    false,
+
+                'message' =>
+                    'The AI assistant could not generate a response right now.',
+
+                'conversation_id' =>
+                    $conversation->id,
+
+                'conversation_channel' =>
+                    $this->conversationChannel(
+                        $conversation
+                    ),
+            ], 500);
+        }
+
+        $aiText =
+            trim(
+                (string)
+                $aiText
+            );
 
         if ($aiText === '') {
             $aiText =
@@ -271,33 +481,89 @@ class ChatController extends Controller
         }
 
         /*
-        * Save the AI message.
+        |--------------------------------------------------------------------------
+        | Persist and deliver AI response
+        |--------------------------------------------------------------------------
+        |
+        | AI replies now use the COMMON OutboundMessageService.
+        |
+        | WebsiteAdapter handles delivery through the existing Reverb
+        | ConversationMessageCreated event.
+        |--------------------------------------------------------------------------
         */
-        $aiMessage = Message::create([
-            'conversation_id' =>
-                $conversation->id,
 
-            'user_id' => null,
-            'sender' => 'ai',
-            'is_system' => false,
-            'message' => $aiText,
-        ]);
+        try {
+            $aiMessage =
+                $this
+                    ->outboundMessageService
+                    ->send(
+                        conversation:
+                            $conversation,
 
-        $conversation->touch();
+                        body:
+                            $aiText,
 
-        broadcast(
-            new ConversationMessageCreated(
-                $aiMessage
-            )
-        );
+                        senderType:
+                            'ai',
+
+                        senderUserId:
+                            null,
+
+                        isAiGenerated:
+                            true,
+
+                        attachments:
+                            [],
+
+                        metadata: [
+                            'source' =>
+                                'website_ai',
+                        ],
+                    );
+        } catch (Throwable $exception) {
+            Log::error(
+                'Website AI outbound delivery failed.',
+                [
+                    'website_id' =>
+                        $website->id,
+
+                    'conversation_id' =>
+                        $conversation->id,
+
+                    'error' =>
+                        $exception->getMessage(),
+                ]
+            );
+
+            return response()->json([
+                'success' =>
+                    false,
+
+                'message' =>
+                    'The AI response could not be delivered.',
+
+                'conversation_id' =>
+                    $conversation->id,
+
+                'conversation_channel' =>
+                    $this->conversationChannel(
+                        $conversation
+                    ),
+            ], 500);
+        }
 
         /*
-        * Return the response to the chat widget.
+        |--------------------------------------------------------------------------
+        | Return response expected by existing widget
+        |--------------------------------------------------------------------------
         */
-        return response()->json([
-            'success' => true,
 
-            'reply' => $aiMessage->message,
+        return response()->json([
+            'success' =>
+                true,
+
+            'reply' =>
+                $aiMessage->message,
 
             'reply_message' =>
                 $this->formatMessage(
@@ -305,7 +571,8 @@ class ChatController extends Controller
                 ),
 
             'mode' =>
-                $conversation->mode ?: 'ai',
+                $conversation->mode
+                ?: 'ai',
 
             'conversation_id' =>
                 $conversation->id,
@@ -315,38 +582,54 @@ class ChatController extends Controller
                     $conversation
                 ),
 
-            'lead' => $lead
-                ? [
-                    'id' => $lead->id,
-                    'name' => $lead->name,
-                    'email' => $lead->email,
-                    'phone' => $lead->phone,
-                    'country' => $lead->country,
+            'lead' =>
+                $lead
+                    ? [
+                        'id' =>
+                            $lead->id,
 
-                    'preferred_contact_time' =>
-                        $lead->preferred_contact_time,
+                        'name' =>
+                            $lead->name,
 
-                    'product_interest' =>
-                        $lead->product_interest,
+                        'email' =>
+                            $lead->email,
 
-                    'lead_score' =>
-                        $lead->lead_score,
+                        'phone' =>
+                            $lead->phone,
 
-                    'status' =>
-                        $lead->status,
-                ]
-                : null,
+                        'country' =>
+                            $lead->country,
 
-            'lead_stage' => $leadStage,
+                        'preferred_contact_time' =>
+                            $lead->preferred_contact_time,
+
+                        'product_interest' =>
+                            $lead->product_interest,
+
+                        'lead_score' =>
+                            $lead->lead_score,
+
+                        'status' =>
+                            $lead->status,
+                    ]
+                    : null,
+
+            'lead_stage' =>
+                $leadStage,
         ]);
     }
 
-  
+    /**
+     * Return public widget configuration.
+     */
     public function config(
         Request $request,
         AgentAvailabilityService $agentAvailability
     ): JsonResponse {
-        $website = $this->resolveWebsite($request);
+        $website =
+            $this->resolveWebsite(
+                $request
+            );
 
         if (!$website) {
             return response()->json([
@@ -355,39 +638,65 @@ class ChatController extends Controller
             ], 404);
         }
 
-        $themes = config('chatbot.themes', []);
+        $themes =
+            config(
+                'chatbot.themes',
+                []
+            );
 
-        $defaultThemeKey = config(
-            'chatbot.default_theme',
-            'blue'
-        );
+        $defaultThemeKey =
+            config(
+                'chatbot.default_theme',
+                'blue'
+            );
 
         $fallbackTheme = [
-            'label' => 'Blue',
-            'primary' => '#2563eb',
-            'secondary' => '#eff6ff',
-            'text' => '#ffffff',
+            'label' =>
+                'Blue',
+
+            'primary' =>
+                '#2563eb',
+
+            'secondary' =>
+                '#eff6ff',
+
+            'text' =>
+                '#ffffff',
         ];
 
-        $themeKey = $website->chatbot_theme
+        $themeKey =
+            $website->chatbot_theme
             ?: $defaultThemeKey;
 
-        $theme = $themes[$themeKey]
+        $theme =
+            $themes[$themeKey]
             ?? $themes[$defaultThemeKey]
             ?? $fallbackTheme;
 
-        $realtimeKey = config('chatbot.realtime.key');
-        $realtimeHost = config('chatbot.realtime.host');
+        $realtimeKey =
+            config(
+                'chatbot.realtime.key'
+            );
+
+        $realtimeHost =
+            config(
+                'chatbot.realtime.host'
+            );
 
         return response()->json([
-            'website_id' => $website->id,
+            'website_id' =>
+                $website->id,
 
             'chatbot_name' =>
                 $website->chatbot_name
-                ?: $website->name . ' Assistant',
+                ?: (
+                    $website->name
+                    . ' Assistant'
+                ),
 
             'theme' => [
-                'key' => $themeKey,
+                'key' =>
+                    $themeKey,
 
                 'primary' =>
                     $theme['primary']
@@ -402,62 +711,89 @@ class ChatController extends Controller
                     ?? $fallbackTheme['text'],
             ],
 
-            'avatar_url' => $website->chatbot_avatar
-                ? asset(
-                    'storage/' .
-                    ltrim($website->chatbot_avatar, '/')
-                )
-                : null,
+            'avatar_url' =>
+                $website->chatbot_avatar
+                    ? asset(
+                        'storage/'
+                        . ltrim(
+                            $website->chatbot_avatar,
+                            '/'
+                        )
+                    )
+                    : null,
 
             'live_agent_available' =>
-                $agentAvailability->hasOnlineAgent($website),
+                $agentAvailability
+                    ->hasOnlineAgent(
+                        $website
+                    ),
 
             'realtime' => [
                 'enabled' =>
-                    filled($realtimeKey) &&
-                    filled($realtimeHost) &&
-                    filled($website->realtime_token),
+                    filled($realtimeKey)
+                    &&
+                    filled($realtimeHost)
+                    &&
+                    filled(
+                        $website->realtime_token
+                    ),
 
-                'key' => $realtimeKey,
-                'host' => $realtimeHost,
+                'key' =>
+                    $realtimeKey,
 
-                'port' => (int) config(
-                    'chatbot.realtime.port',
-                    443
-                ),
+                'host' =>
+                    $realtimeHost,
 
-                'scheme' => config(
-                    'chatbot.realtime.scheme',
-                    'https'
-                ),
+                'port' =>
+                    (int)
+                    config(
+                        'chatbot.realtime.port',
+                        443
+                    ),
+
+                'scheme' =>
+                    config(
+                        'chatbot.realtime.scheme',
+                        'https'
+                    ),
 
                 'website_channel' =>
-                    filled($website->realtime_token)
-                        ? 'website.' .
-                            $website->realtime_token
+                    filled(
+                        $website->realtime_token
+                    )
+                        ? 'website.'
+                            . $website->realtime_token
                         : null,
             ],
         ]);
     }
 
-  
-    public function history(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'visitor_id' => [
-                'required',
-                'string',
-                'max:255',
-            ],
-            'limit' => [
-                'nullable',
-                'integer',
-                'min:1',
-                'max:100',
-            ],
-        ]);
+    /**
+     * Return previous messages for a website visitor.
+     */
+    public function history(
+        Request $request
+    ): JsonResponse {
+        $validated =
+            $request->validate([
+                'visitor_id' => [
+                    'required',
+                    'string',
+                    'max:255',
+                ],
 
-        $website = $this->resolveWebsite($request);
+                'limit' => [
+                    'nullable',
+                    'integer',
+                    'min:1',
+                    'max:100',
+                ],
+            ]);
+
+        $website =
+            $this->resolveWebsite(
+                $request
+            );
 
         if (!$website) {
             return response()->json([
@@ -466,66 +802,97 @@ class ChatController extends Controller
             ], 404);
         }
 
-        $limit = (int) (
-            $validated['limit']
-            ?? 50
-        );
+        $limit =
+            (int)
+            (
+                $validated['limit']
+                ?? 50
+            );
 
-        $conversation = Conversation::query()
-            ->where('website_id', $website->id)
-            ->where(
-                'visitor_id',
+        /*
+         * History lookup should not create
+         * a brand-new empty conversation.
+         */
+        $conversation =
+            $this->findWebsiteConversation(
+                $website,
                 $validated['visitor_id']
-            )
-            ->first();
+            );
 
         if (!$conversation) {
             return response()->json([
-                'conversation_id' => null,
-                'conversation_channel' => null,
-                'mode' => 'ai',
-                'messages' => [],
+                'conversation_id' =>
+                    null,
+
+                'conversation_channel' =>
+                    null,
+
+                'mode' =>
+                    'ai',
+
+                'messages' =>
+                    [],
             ]);
         }
 
-        $messages = $conversation
-            ->messages()
-            ->with('user')
-            ->latest('id')
-            ->limit($limit)
-            ->get()
-            ->sortBy('id')
-            ->values()
-            ->map(function (Message $message): array {
-                return $this->formatMessage($message);
-            });
+        $messages =
+            $conversation
+                ->messages()
+                ->with('user')
+                ->latest('id')
+                ->limit($limit)
+                ->get()
+                ->sortBy('id')
+                ->values()
+                ->map(
+                    function (
+                        Message $message
+                    ): array {
+                        return
+                            $this->formatMessage(
+                                $message
+                            );
+                    }
+                );
 
         return response()->json([
-            'conversation_id' => $conversation->id,
+            'conversation_id' =>
+                $conversation->id,
 
             'conversation_channel' =>
-                $this->conversationChannel($conversation),
+                $this->conversationChannel(
+                    $conversation
+                ),
 
-            'mode' => $conversation->mode ?: 'ai',
+            'mode' =>
+                $conversation->mode
+                ?: 'ai',
 
-            'messages' => $messages,
+            'messages' =>
+                $messages,
         ]);
     }
 
- 
+    /**
+     * Visitor requests a human/live agent.
+     */
     public function requestLiveAgent(
         Request $request,
         AgentAvailabilityService $agentAvailability
     ): JsonResponse {
-        $validated = $request->validate([
-            'visitor_id' => [
-                'required',
-                'string',
-                'max:255',
-            ],
-        ]);
+        $validated =
+            $request->validate([
+                'visitor_id' => [
+                    'required',
+                    'string',
+                    'max:255',
+                ],
+            ]);
 
-        $website = $this->resolveWebsite($request);
+        $website =
+            $this->resolveWebsite(
+                $request
+            );
 
         if (!$website) {
             return response()->json([
@@ -535,105 +902,204 @@ class ChatController extends Controller
         }
 
         if (
-            !$agentAvailability->hasOnlineAgent(
-                $website
-            )
+            !$agentAvailability
+                ->hasOnlineAgent(
+                    $website
+                )
         ) {
             return response()->json([
                 'message' =>
                     'No live agent is currently available.',
 
-                'available' => false,
+                'available' =>
+                    false,
             ], 409);
         }
 
-        $result = DB::transaction(function () use (
-            $website,
-            $validated
-        ): array {
-            $conversation = Conversation::query()
-                ->firstOrCreate(
-                    [
-                        'website_id' => $website->id,
+        /*
+         * Live-agent request is a genuine visitor
+         * interaction, so creating/upgrading the
+         * omnichannel conversation is appropriate.
+         */
 
-                        'visitor_id' =>
-                            $validated['visitor_id'],
-                    ],
-                    [
-                        'status' => 'active',
-                        'mode' => 'ai',
-                        'lead_stage' => 'discovery',
-                    ]
-                );
-
-            $conversation = Conversation::query()
-                ->lockForUpdate()
-                ->findOrFail($conversation->id);
-
-            if ($conversation->mode === 'live') {
-                return [
-                    'conversation' => $conversation,
-                    'message' => null,
-                    'already_requested' => true,
-                    'response_message' =>
-                        'A live agent is already handling this conversation.',
-                ];
-            }
-
-            if (
-                $conversation->mode ===
-                'live_waiting'
-            ) {
-                return [
-                    'conversation' => $conversation,
-                    'message' => null,
-                    'already_requested' => true,
-                    'response_message' =>
-                        'A live agent has already been notified. Please wait a moment.',
-                ];
-            }
-
-            $conversation->update([
-                'mode' => 'live_waiting',
-                'assigned_agent_id' => null,
-                'live_requested_at' => now(),
-                'live_started_at' => null,
-                'live_ended_at' => null,
-            ]);
-
-            $systemMessage = Message::create([
-                'conversation_id' =>
-                    $conversation->id,
-
-                'user_id' => null,
-                'sender' => 'system',
-                'is_system' => true,
-
+        try {
+            $conversation =
+                $this
+                    ->websiteConversationResolver
+                    ->resolve(
+                        $website,
+                        $validated['visitor_id']
+                    );
+        } catch (RuntimeException $exception) {
+            return response()->json([
                 'message' =>
-                    'Visitor requested a live agent.',
-            ]);
+                    $exception->getMessage(),
+            ], 409);
+        }
 
-            return [
-                'conversation' =>
-                    $conversation->fresh(),
+        $result =
+            DB::transaction(
+                function () use (
+                    $conversation
+                ): array {
+                    $conversation =
+                        Conversation::query()
+                            ->lockForUpdate()
+                            ->findOrFail(
+                                $conversation->id
+                            );
 
-                'message' => $systemMessage,
+                    if (
+                        $conversation->mode
+                        === 'live'
+                    ) {
+                        return [
+                            'conversation' =>
+                                $conversation,
 
-                'already_requested' => false,
+                            'message' =>
+                                null,
 
-                'response_message' =>
-                    'A live agent has been notified. Please wait a moment.',
-            ];
-        });
+                            'already_requested' =>
+                                true,
+
+                            'response_message' =>
+                                'A live agent is already handling this conversation.',
+                        ];
+                    }
+
+                    if (
+                        $conversation->mode
+                        === 'live_waiting'
+                    ) {
+                        return [
+                            'conversation' =>
+                                $conversation,
+
+                            'message' =>
+                                null,
+
+                            'already_requested' =>
+                                true,
+
+                            'response_message' =>
+                                'A live agent has already been notified. Please wait a moment.',
+                        ];
+                    }
+
+                    $conversation->update([
+                        'mode' =>
+                            'live_waiting',
+
+                        /*
+                         * Existing website live-chat assignment.
+                         */
+                        'assigned_agent_id' =>
+                            null,
+
+                        /*
+                         * New common omnichannel assignment.
+                         */
+                        'assigned_user_id' =>
+                            null,
+
+                        'live_requested_at' =>
+                            now(),
+
+                        'live_started_at' =>
+                            null,
+
+                        'live_ended_at' =>
+                            null,
+                    ]);
+
+                    /*
+                     * System message remains local but now
+                     * also includes omnichannel fields.
+                     */
+                    $systemMessage =
+                        Message::create([
+                            'conversation_id' =>
+                                $conversation->id,
+
+                            'channel_connection_id' =>
+                                $conversation
+                                    ->channel_connection_id,
+
+                            'user_id' =>
+                                null,
+
+                            'sender_user_id' =>
+                                null,
+
+                            'sender' =>
+                                'system',
+
+                            'sender_type' =>
+                                'system',
+
+                            'direction' =>
+                                'outbound',
+
+                            'message_type' =>
+                                'text',
+
+                            'status' =>
+                                'sent',
+
+                            'is_ai_generated' =>
+                                false,
+
+                            'is_system' =>
+                                true,
+
+                            'sent_at' =>
+                                now(),
+
+                            'message' =>
+                                'Visitor requested a live agent.',
+                        ]);
+
+                    return [
+                        'conversation' =>
+                            $conversation->fresh(),
+
+                        'message' =>
+                            $systemMessage,
+
+                        'already_requested' =>
+                            false,
+
+                        'response_message' =>
+                            'A live agent has been notified. Please wait a moment.',
+                    ];
+                }
+            );
 
         $conversation =
             $result['conversation'];
 
-        if (!$result['already_requested']) {
+        /*
+        |--------------------------------------------------------------------------
+        | Broadcast live-agent request
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            !$result['already_requested']
+        ) {
             broadcast(
                 new ConversationMessageCreated(
                     $result['message']
                 )
+            );
+
+            /*
+             * Also publish to the new omnichannel inbox.
+             */
+            OmnichannelMessageChanged::dispatch(
+                $result['message'],
+                'created'
             );
 
             broadcast(
@@ -650,10 +1116,13 @@ class ChatController extends Controller
         }
 
         return response()->json([
-            'success' => true,
+            'success' =>
+                true,
 
             'message' =>
-                $result['response_message'],
+                $result[
+                    'response_message'
+                ],
 
             'conversation_id' =>
                 $conversation->id,
@@ -667,53 +1136,144 @@ class ChatController extends Controller
                 $conversation->mode,
 
             'already_requested' =>
-                $result['already_requested'],
+                $result[
+                    'already_requested'
+                ],
         ]);
     }
 
-    private function resolveWebsite(Request $request)
-    {
-        return $request->website
-            ?? $request->attributes->get('website');
+    /**
+     * Find an existing website conversation without
+     * creating one.
+     */
+    private function findWebsiteConversation(
+        Website $website,
+        string $visitorId
+    ): ?Conversation {
+        try {
+            $connection =
+                $this
+                    ->websiteConversationResolver
+                    ->connectionFor(
+                        $website
+                    );
+
+            $externalThreadId =
+                WebsiteIdentity::externalThreadId(
+                    $website->id,
+                    $visitorId
+                );
+
+            /*
+             * Prefer omnichannel lookup.
+             */
+            $conversation =
+                Conversation::query()
+                    ->where(
+                        'channel_connection_id',
+                        $connection->id
+                    )
+                    ->where(
+                        'external_thread_id',
+                        $externalThreadId
+                    )
+                    ->first();
+
+            if ($conversation) {
+                return $conversation;
+            }
+        } catch (RuntimeException) {
+            /*
+             * During deployment/backfill, fall through
+             * and attempt the legacy lookup.
+             */
+        }
+
+        /*
+         * Legacy website lookup.
+         */
+        return Conversation::query()
+            ->where(
+                'website_id',
+                $website->id
+            )
+            ->where(
+                'visitor_id',
+                $visitorId
+            )
+            ->orderBy('id')
+            ->first();
     }
 
+    /**
+     * Website is attached to the request by
+     * the existing embed-token middleware.
+     */
+    private function resolveWebsite(
+        Request $request
+    ): ?Website {
+        return
+            $request->website
+            ??
+            $request
+                ->attributes
+                ->get(
+                    'website'
+                );
+    }
 
+    /**
+     * Existing website Reverb channel.
+     */
     private function conversationChannel(
         Conversation $conversation
     ): ?string {
-        if (!$conversation->realtime_token) {
+        if (
+            !$conversation->realtime_token
+        ) {
             return null;
         }
 
-        return 'conversation.' .
-            $conversation->realtime_token;
+        return
+            'conversation.'
+            . $conversation->realtime_token;
     }
 
+    /**
+     * Preserve the JSON structure expected by
+     * the existing website widget.
+     */
     private function formatMessage(
         Message $message
     ): array {
-        $message->loadMissing('user');
+        $message->loadMissing(
+            'user'
+        );
 
         return [
-            'id' => $message->id,
+            'id' =>
+                $message->id,
 
             'conversation_id' =>
                 $message->conversation_id,
 
-            'sender' => $message->sender,
+            'sender' =>
+                $message->sender,
 
-            'message' => $message->message,
+            'message' =>
+                $message->message,
 
             'is_system' =>
-                (bool) $message->is_system,
+                (bool)
+                $message->is_system,
 
             'agent_name' =>
                 $message->user?->name,
 
             'created_at' =>
-                $message->created_at
+                $message
+                    ->created_at
                     ?->toISOString(),
         ];
     }
-    
 }

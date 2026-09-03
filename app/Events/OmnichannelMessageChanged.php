@@ -3,12 +3,15 @@
 namespace App\Events;
 
 use App\Models\Message;
+use Carbon\CarbonInterface;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Carbon;
 use RuntimeException;
+use Throwable;
 
 class OmnichannelMessageChanged implements ShouldBroadcastNow
 {
@@ -20,6 +23,12 @@ class OmnichannelMessageChanged implements ShouldBroadcastNow
         public Message $message,
         public string $changeType = 'updated'
     ) {
+        /*
+        |--------------------------------------------------------------------------
+        | Load owning conversation
+        |--------------------------------------------------------------------------
+        */
+
         $this->message->loadMissing(
             'conversation'
         );
@@ -29,8 +38,31 @@ class OmnichannelMessageChanged implements ShouldBroadcastNow
                 'Cannot broadcast an omnichannel message without a conversation.'
             );
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Omnichannel conversations require tenant ownership
+        |--------------------------------------------------------------------------
+        |
+        | Legacy website conversations can still exist without tenant_id.
+        | They continue using ConversationMessageCreated and the existing
+        | public conversation realtime channel.
+        |
+        */
+
+        if (!$this->message->conversation->tenant_id) {
+            throw new RuntimeException(
+                'Cannot broadcast an omnichannel message without tenant ownership.'
+            );
+        }
     }
 
+    /**
+     * Broadcast to:
+     *
+     * 1. Entire tenant inbox
+     * 2. Specific open conversation
+     */
     public function broadcastOn(): array
     {
         $conversation =
@@ -47,11 +79,24 @@ class OmnichannelMessageChanged implements ShouldBroadcastNow
         ];
     }
 
+    /**
+     * Laravel Echo event name.
+     */
     public function broadcastAs(): string
     {
         return 'omnichannel.message.changed';
     }
 
+    /**
+     * Keep the broadcast payload intentionally small.
+     *
+     * Do not broadcast:
+     *
+     * - credentials
+     * - webhook payloads
+     * - provider raw responses
+     * - internal exceptions
+     */
     public function broadcastWith(): array
     {
         $conversation =
@@ -90,21 +135,33 @@ class OmnichannelMessageChanged implements ShouldBroadcastNow
                     $this->message->status,
 
                 'is_ai_generated' =>
-                    (bool) $this->message->is_ai_generated,
+                    (bool) $this->message
+                        ->is_ai_generated,
 
                 'sent_at' =>
-                    $this->message->sent_at
-                        ? $this->message
-                            ->sent_at
-                            ->toIso8601String()
-                        : null,
+                    $this->formatDate(
+                        $this->message->sent_at
+                    ),
+
+                'delivered_at' =>
+                    $this->formatDate(
+                        $this->message->delivered_at
+                    ),
+
+                'read_at' =>
+                    $this->formatDate(
+                        $this->message->read_at
+                    ),
 
                 'created_at' =>
-                    $this->message->created_at
-                        ? $this->message
-                            ->created_at
-                            ->toIso8601String()
-                        : null,
+                    $this->formatDate(
+                        $this->message->created_at
+                    ),
+
+                'updated_at' =>
+                    $this->formatDate(
+                        $this->message->updated_at
+                    ),
             ],
 
             'conversation' => [
@@ -114,11 +171,17 @@ class OmnichannelMessageChanged implements ShouldBroadcastNow
                 'tenant_id' =>
                     $conversation->tenant_id,
 
+                'ai_agent_id' =>
+                    $conversation->ai_agent_id,
+
                 'channel_connection_id' =>
                     $conversation->channel_connection_id,
 
                 'contact_id' =>
                     $conversation->contact_id,
+
+                'assigned_user_id' =>
+                    $conversation->assigned_user_id,
 
                 'status' =>
                     $conversation->status,
@@ -126,30 +189,54 @@ class OmnichannelMessageChanged implements ShouldBroadcastNow
                 'mode' =>
                     $conversation->mode,
 
+                'priority' =>
+                    $conversation->priority,
+
                 'unread_count' =>
-                    (int) $conversation->unread_count,
+                    (int) $conversation
+                        ->unread_count,
 
                 'last_message_at' =>
-                    $conversation->last_message_at
-                        ? $conversation
+                    $this->formatDate(
+                        $conversation
                             ->last_message_at
-                            ->toIso8601String()
-                        : null,
+                    ),
 
                 'last_inbound_at' =>
-                    $conversation->last_inbound_at
-                        ? $conversation
+                    $this->formatDate(
+                        $conversation
                             ->last_inbound_at
-                            ->toIso8601String()
-                        : null,
+                    ),
 
                 'first_response_at' =>
-                    $conversation->first_response_at
-                        ? $conversation
+                    $this->formatDate(
+                        $conversation
                             ->first_response_at
-                            ->toIso8601String()
-                        : null,
+                    ),
             ],
         ];
+    }
+
+    /**
+     * Handles both Carbon casts and raw datetime strings.
+     */
+    private function formatDate(
+        mixed $value
+    ): ?string {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($value instanceof CarbonInterface) {
+            return $value->toIso8601String();
+        }
+
+        try {
+            return Carbon::parse(
+                $value
+            )->toIso8601String();
+        } catch (Throwable) {
+            return (string) $value;
+        }
     }
 }
