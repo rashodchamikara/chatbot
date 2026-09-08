@@ -18,38 +18,19 @@ use Throwable;
 class InboundMessageService
 {
     public function handle(
-<<<<<<< HEAD
         InboundMessageData $data
     ): Message {
         /*
          * Explicitly track whether THIS request created
-         * the message.
+         * the local message.
          *
-         * This is safer than relying on wasRecentlyCreated
-         * after refresh/load operations.
+         * This prevents provider webhook retries from
+         * broadcasting duplicate realtime events.
          */
-=======
-        ChannelConnection $connection,
-        InboundMessageData $data
-    ): Message {
-        if ((int) $connection->id !== $data->channelConnectionId) {
-            throw new RuntimeException(
-                'Inbound message channel connection does not match the supplied connection.'
-            );
-        }
-
-        if ((int) $connection->tenant_id !== $data->tenantId) {
-            throw new RuntimeException(
-                'Inbound message tenant does not match the channel connection tenant.'
-            );
-        }
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
         $wasCreated = false;
 
         $message = DB::transaction(
             function () use (
-<<<<<<< HEAD
                 $data,
                 &$wasCreated
             ): Message {
@@ -78,39 +59,65 @@ class InboundMessageService
 
                 /*
                 |--------------------------------------------------------------------------
-                | Idempotency
+                | Normalize provider message ID
                 |--------------------------------------------------------------------------
                 |
-                | Providers may resend the same webhook.
+                | Website messages may not have a provider/client message ID.
                 |
-                | A provider message must therefore only
-                | create one local Message record.
+                | WhatsApp messages normally do:
+                |
+                |     wamid.HBgM...
+                |
+                | Never use NULL as an idempotency key.
                 |
                 */
 
-                $existingMessage =
-                    Message::query()
-=======
-                $connection,
-                $data,
-                &$wasCreated
-            ): Message {
-                if ($data->externalMessageId) {
-                    $existing = Message::query()
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
-                        ->where(
-                            'channel_connection_id',
-                            $connection->id
-                        )
-                        ->where(
-                            'external_message_id',
+                $externalMessageId =
+                    $data->externalMessageId !== null
+                        ? trim(
                             $data->externalMessageId
                         )
-                        ->first();
+                        : null;
 
-<<<<<<< HEAD
-                if ($existingMessage) {
-                    return $existingMessage;
+                if ($externalMessageId === '') {
+                    $externalMessageId = null;
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Idempotency
+                |--------------------------------------------------------------------------
+                |
+                | Providers such as Meta may resend the exact same webhook.
+                |
+                | Only perform duplicate detection when the provider supplied
+                | a real message identifier.
+                |
+                | BAD:
+                |
+                | external_message_id IS NULL
+                |
+                | because many unrelated website messages may legitimately
+                | contain NULL.
+                |
+                */
+
+                if ($externalMessageId !== null) {
+                    $existingMessage =
+                        Message::query()
+                            ->where(
+                                'channel_connection_id',
+                                $connection->id
+                            )
+                            ->where(
+                                'external_message_id',
+                                $externalMessageId
+                            )
+                            ->first();
+
+                    if ($existingMessage) {
+                        return $existingMessage;
+                    }
                 }
 
                 /*
@@ -154,25 +161,6 @@ class InboundMessageService
 
                 $message =
                     new Message();
-=======
-                    if ($existing) {
-                        return $existing;
-                    }
-                }
-
-                $contact = $this->resolveContact(
-                    $connection,
-                    $data
-                );
-
-                $conversation = $this->resolveConversation(
-                    $connection,
-                    $contact,
-                    $data
-                );
-
-                $message = new Message();
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                 $message->conversation_id =
                     $conversation->id;
@@ -180,18 +168,11 @@ class InboundMessageService
                 $message->channel_connection_id =
                     $connection->id;
 
-<<<<<<< HEAD
-=======
-                // Legacy website/live-chat compatibility.
-                $message->user_id = null;
-                $message->sender = 'visitor';
-                $message->role = 'user';
-                $message->is_system = false;
-
-                // Omnichannel fields.
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
+                /*
+                 * Use the normalized value.
+                 */
                 $message->external_message_id =
-                    $data->externalMessageId;
+                    $externalMessageId;
 
                 $message->direction =
                     'inbound';
@@ -200,17 +181,10 @@ class InboundMessageService
                     'contact';
 
                 $message->message_type =
-<<<<<<< HEAD
                     $data->messageType;
 
                 $message->message =
                     $data->text ?? '';
-=======
-                    $data->messageType ?: 'text';
-
-                $message->message =
-                    $data->text;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                 $message->payload = [
                     'external_contact_id' =>
@@ -226,26 +200,13 @@ class InboundMessageService
                 $message->status =
                     'received';
 
-<<<<<<< HEAD
                 $message->is_ai_generated =
                     false;
 
-=======
-                $message->provider_status =
-                    'received';
-
-                $message->is_ai_generated =
-                    false;
-
-                $message->provider_created_at =
-                    $data->providerCreatedAt;
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 $message->save();
 
                 $wasCreated = true;
 
-<<<<<<< HEAD
                 /*
                 |--------------------------------------------------------------------------
                 | Attachments
@@ -277,21 +238,6 @@ class InboundMessageService
                 $conversation->unread_count =
                     ((int) $conversation->unread_count)
                     + 1;
-=======
-                $this->storeAttachments(
-                    $message,
-                    $data->attachments
-                );
-
-                $conversation->last_message_at =
-                    now();
-
-                $conversation->last_inbound_at =
-                    now();
-
-                $conversation->unread_count =
-                    ((int) $conversation->unread_count) + 1;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                 $conversation->save();
 
@@ -299,17 +245,17 @@ class InboundMessageService
             }
         );
 
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Realtime broadcast
         |--------------------------------------------------------------------------
         |
-        | Only broadcast when THIS request actually
-        | created the message.
+        | Broadcast only when THIS request created the message.
         |
-        | Provider webhook retries are therefore
-        | silent.
+        | Example:
+        |
+        | WhatsApp webhook #1 -> creates message -> broadcast
+        | WhatsApp retry     -> existing message -> no broadcast
         |
         */
 
@@ -327,29 +273,13 @@ class InboundMessageService
     }
 
     /**
-     * Resolve/create the customer represented by
+     * Resolve or create the Contact represented by
      * the incoming provider message.
      */
-=======
-        if ($wasCreated) {
-            $this->broadcastMessageChange(
-                $message,
-                'created'
-            );
-        }
-
-        return $message->fresh([
-            'conversation',
-            'attachments',
-        ]);
-    }
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     protected function resolveContact(
         ChannelConnection $connection,
         InboundMessageData $data
     ): Contact {
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Existing channel identity
@@ -399,7 +329,7 @@ class InboundMessageService
 
         /*
         |--------------------------------------------------------------------------
-        | Attempt matching by email
+        | Attempt contact matching by email
         |--------------------------------------------------------------------------
         */
 
@@ -421,13 +351,13 @@ class InboundMessageService
 
         /*
         |--------------------------------------------------------------------------
-        | Attempt matching by phone
+        | Attempt contact matching by phone
         |--------------------------------------------------------------------------
         */
 
         if (
-            !$contact &&
-            $data->contactPhone
+            !$contact
+            && $data->contactPhone
         ) {
             $contact =
                 Contact::query()
@@ -517,144 +447,13 @@ class InboundMessageService
         ];
 
         $identity->save();
-=======
-        $identity = ContactIdentity::query()
-            ->where(
-                'tenant_id',
-                $connection->tenant_id
-            )
-            ->where(
-                'channel_connection_id',
-                $connection->id
-            )
-            ->where(
-                'external_user_id',
-                $data->externalContactId
-            )
-            ->first();
-
-        if ($identity) {
-            $contact = Contact::query()
-                ->whereKey($identity->contact_id)
-                ->where(
-                    'tenant_id',
-                    $connection->tenant_id
-                )
-                ->first();
-
-            if ($contact) {
-                $changed = false;
-
-                if (
-                    !$contact->name
-                    && $data->contactName
-                ) {
-                    $contact->name =
-                        $data->contactName;
-                    $changed = true;
-                }
-
-                if (
-                    !$contact->email
-                    && $data->contactEmail
-                ) {
-                    $contact->email =
-                        $data->contactEmail;
-                    $changed = true;
-                }
-
-                if (
-                    !$contact->phone
-                    && $data->contactPhone
-                ) {
-                    $contact->phone =
-                        $data->contactPhone;
-                    $changed = true;
-                }
-
-                if ($changed) {
-                    $contact->save();
-                }
-
-                return $contact;
-            }
-        }
-
-        $contact = Contact::create([
-            'tenant_id' =>
-                $connection->tenant_id,
-
-            'name' =>
-                $data->contactName,
-
-            'email' =>
-                $data->contactEmail,
-
-            'phone' =>
-                $data->contactPhone,
-
-            'company' =>
-                null,
-
-            'status' =>
-                'active',
-
-            'metadata' => [
-                'created_from_channel_connection_id' =>
-                    $connection->id,
-
-                'provider' =>
-                    $connection->provider,
-            ],
-        ]);
-
-        $channelType =
-            $connection->type instanceof \BackedEnum
-                ? $connection->type->value
-                : (string) $connection->type;
-
-        ContactIdentity::create([
-            'tenant_id' =>
-                $connection->tenant_id,
-
-            'contact_id' =>
-                $contact->id,
-
-            'channel_connection_id' =>
-                $connection->id,
-
-            'channel' =>
-                $channelType,
-
-            'external_user_id' =>
-                $data->externalContactId,
-
-            'display_name' =>
-                $data->contactName,
-
-            'username' =>
-                null,
-
-            'normalized_address' =>
-                $data->externalContactId,
-
-            'is_verified' =>
-                false,
-
-            'metadata' => [
-                'provider' =>
-                    $connection->provider,
-            ],
-        ]);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
         return $contact;
     }
 
-<<<<<<< HEAD
     /**
-     * Add new contact information without overwriting
-     * information previously collected.
+     * Add newly supplied contact information without
+     * overwriting information already collected.
      */
     protected function updateContactDetails(
         Contact $contact,
@@ -663,8 +462,8 @@ class InboundMessageService
         $changed = false;
 
         if (
-            !$contact->name &&
-            $data->contactName
+            !$contact->name
+            && $data->contactName
         ) {
             $contact->name =
                 $data->contactName;
@@ -673,8 +472,8 @@ class InboundMessageService
         }
 
         if (
-            !$contact->email &&
-            $data->contactEmail
+            !$contact->email
+            && $data->contactEmail
         ) {
             $contact->email =
                 $data->contactEmail;
@@ -683,8 +482,8 @@ class InboundMessageService
         }
 
         if (
-            !$contact->phone &&
-            $data->contactPhone
+            !$contact->phone
+            && $data->contactPhone
         ) {
             $contact->phone =
                 $data->contactPhone;
@@ -701,20 +500,17 @@ class InboundMessageService
      * Resolve or create the conversation owning
      * this inbound message.
      */
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     protected function resolveConversation(
         ChannelConnection $connection,
         Contact $contact,
         InboundMessageData $data
     ): Conversation {
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Provider thread ID
         |--------------------------------------------------------------------------
         |
-        | This is the strongest conversation identifier.
+        | This is the strongest available conversation identifier.
         |
         */
 
@@ -751,32 +547,6 @@ class InboundMessageService
                 ->where(
                     'tenant_id',
                     $data->tenantId
-=======
-        $conversation = null;
-
-        if ($data->externalThreadId) {
-            $conversation = Conversation::query()
-                ->where(
-                    'tenant_id',
-                    $connection->tenant_id
-                )
-                ->where(
-                    'channel_connection_id',
-                    $connection->id
-                )
-                ->where(
-                    'external_thread_id',
-                    $data->externalThreadId
-                )
-                ->first();
-        }
-
-        if (!$conversation) {
-            $conversation = Conversation::query()
-                ->where(
-                    'tenant_id',
-                    $connection->tenant_id
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 )
                 ->where(
                     'channel_connection_id',
@@ -790,23 +560,22 @@ class InboundMessageService
                     'status',
                     'active'
                 )
-                ->latest('id')
+                ->latest(
+                    'id'
+                )
                 ->first();
-<<<<<<< HEAD
 
         if ($conversation) {
             /*
-             * Some providers may give us their thread ID
+             * Some providers may supply their thread ID
              * after our local conversation was created.
              */
 
             if (
-                !$conversation
-                    ->external_thread_id &&
-                $data->externalThreadId
+                !$conversation->external_thread_id
+                && $data->externalThreadId
             ) {
-                $conversation
-                    ->external_thread_id =
+                $conversation->external_thread_id =
                     $data->externalThreadId;
 
                 $conversation->save();
@@ -826,52 +595,6 @@ class InboundMessageService
 
         $conversation->tenant_id =
             $data->tenantId;
-=======
-        }
-
-        if (!$conversation && $connection->website_id) {
-            $conversation = Conversation::query()
-                ->where(
-                    'website_id',
-                    $connection->website_id
-                )
-                ->where(
-                    'visitor_id',
-                    $data->externalContactId
-                )
-                ->first();
-        }
-
-        if (!$conversation) {
-            $conversation = new Conversation();
-
-            $conversation->status =
-                'active';
-
-            $conversation->mode =
-                'ai';
-
-            $conversation->priority =
-                'normal';
-
-            $conversation->unread_count =
-                0;
-
-            if ($connection->website_id) {
-                $conversation->website_id =
-                    $connection->website_id;
-
-                $conversation->visitor_id =
-                    $data->externalContactId;
-
-                $conversation->lead_stage =
-                    'discovery';
-            }
-        }
-
-        $conversation->tenant_id =
-            $connection->tenant_id;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
         $conversation->ai_agent_id =
             $connection->ai_agent_id;
@@ -882,28 +605,15 @@ class InboundMessageService
         $conversation->contact_id =
             $contact->id;
 
-<<<<<<< HEAD
         /*
-         * Preserve compatibility with existing
-         * website conversations.
+         * Preserve compatibility with the existing
+         * website channel.
          */
         if ($connection->website_id) {
-=======
-        if ($data->externalThreadId) {
-            $conversation->external_thread_id =
-                $data->externalThreadId;
-        }
-
-        if (
-            $connection->website_id
-            && !$conversation->website_id
-        ) {
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
             $conversation->website_id =
                 $connection->website_id;
         }
 
-<<<<<<< HEAD
         $conversation->external_thread_id =
             $data->externalThreadId;
 
@@ -932,62 +642,29 @@ class InboundMessageService
             'provider' =>
                 $connection->provider,
         ];
-=======
-        if (
-            $connection->website_id
-            && !$conversation->visitor_id
-        ) {
-            $conversation->visitor_id =
-                $data->externalContactId;
-        }
-
-        $metadata =
-            is_array($conversation->metadata)
-                ? $conversation->metadata
-                : [];
-
-        $metadata['channel'] =
-            $connection->type instanceof \BackedEnum
-                ? $connection->type->value
-                : $connection->type;
-
-        $metadata['provider'] =
-            $connection->provider;
-
-        $conversation->metadata =
-            $metadata;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
         $conversation->save();
 
         return $conversation;
     }
 
-<<<<<<< HEAD
     /**
      * Store provider attachment metadata.
      *
-     * The actual file does not necessarily need to be
-     * downloaded during webhook processing.
+     * The actual media file does not necessarily need
+     * to be downloaded while processing the webhook.
      */
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     protected function storeAttachments(
         Message $message,
         array $attachments
     ): void {
-<<<<<<< HEAD
         foreach (
             $attachments as $attachment
         ) {
-=======
-        foreach ($attachments as $attachment) {
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
             if (!is_array($attachment)) {
                 continue;
             }
 
-<<<<<<< HEAD
             $record =
                 new MessageAttachment();
 
@@ -1035,81 +712,20 @@ class InboundMessageService
     }
 
     /**
-     * Broadcast without allowing a temporary Reverb
-     * failure to reject an otherwise valid provider
-     * webhook.
+     * A temporary Reverb/broadcasting failure must not
+     * reject an otherwise successfully processed
+     * provider webhook.
      */
-=======
-            MessageAttachment::create([
-                'message_id' =>
-                    $message->id,
-
-                'external_attachment_id' =>
-                    $attachment['external_attachment_id']
-                    ?? null,
-
-                'type' =>
-                    $attachment['type']
-                    ?? 'file',
-
-                'mime_type' =>
-                    $attachment['mime_type']
-                    ?? null,
-
-                'original_name' =>
-                    $attachment['original_name']
-                    ?? null,
-
-                'storage_disk' =>
-                    $attachment['storage_disk']
-                    ?? null,
-
-                'storage_path' =>
-                    $attachment['storage_path']
-                    ?? null,
-
-                'external_url' =>
-                    $attachment['external_url']
-                    ?? null,
-
-                'size' =>
-                    $attachment['size']
-                    ?? null,
-
-                'checksum' =>
-                    $attachment['checksum']
-                    ?? null,
-
-                'status' =>
-                    $attachment['status']
-                    ?? 'pending',
-
-                'error_message' =>
-                    $attachment['error_message']
-                    ?? null,
-
-                'metadata' =>
-                    $attachment['metadata']
-                    ?? [],
-            ]);
-        }
-    }
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     protected function broadcastMessageChange(
         Message $message,
         string $changeType
     ): void {
         try {
             $message->refresh();
-<<<<<<< HEAD
 
             $message->load(
                 'conversation'
             );
-=======
-            $message->load('conversation');
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
             OmnichannelMessageChanged::dispatch(
                 $message,
@@ -1126,13 +742,10 @@ class InboundMessageService
                         $changeType,
 
                     'error' =>
-                        $exception->getMessage(),
+                        $exception
+                            ->getMessage(),
                 ]
             );
         }
     }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)

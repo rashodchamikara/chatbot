@@ -2,24 +2,17 @@
 
 namespace App\Console\Commands;
 
-<<<<<<< HEAD
 use App\Models\AiAgent;
 use App\Models\ChannelConnection;
 use App\Models\Website;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-=======
-use App\Models\Website;
-use App\Services\Omnichannel\WebsiteOmnichannelProvisioner;
-use Illuminate\Console\Command;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 use Throwable;
 
 class BackfillWebsiteAgents extends Command
 {
     protected $signature =
-<<<<<<< HEAD
         'omnichannel:backfill-website-agents';
 
     protected $description =
@@ -254,80 +247,17 @@ class BackfillWebsiteAgents extends Command
                     }
                 }
             );
-=======
-        'omnichannel:backfill-website-agents
-        {--website= : Backfill only one website ID}';
-
-    protected $description =
-        'Create or repair AI agents and native channel connections for existing websites.';
-
-    public function handle(
-        WebsiteOmnichannelProvisioner $provisioner
-    ): int {
-        $query = Website::withTrashed()
-            ->orderBy('id');
-
-        if ($this->option('website')) {
-            $query->where(
-                'id',
-                (int) $this->option('website')
-            );
-        }
-
-        $processed = 0;
-        $failed = 0;
-
-        $query->chunkById(
-            100,
-            function ($websites) use (
-                $provisioner,
-                &$processed,
-                &$failed
-            ): void {
-                foreach ($websites as $website) {
-                    try {
-                        $connection =
-                            $provisioner
-                                ->provision($website);
-
-                        $processed++;
-
-                        $this->line(
-                            "Website {$website->id}: "
-                            . "agent {$connection->ai_agent_id}, "
-                            . "channel {$connection->id}"
-                        );
-                    } catch (Throwable $exception) {
-                        $failed++;
-
-                        $this->error(
-                            "Website {$website->id} failed: "
-                            . $exception->getMessage()
-                        );
-                    }
-                }
-            }
-        );
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
         $this->newLine();
 
         $this->info(
-<<<<<<< HEAD
             "Completed. Processed: {$processed}; "
             . "skipped: {$skipped}; "
             . "failed: {$failed}."
-=======
-            "Completed. Processed: {$processed}; failed: {$failed}."
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
         );
 
         return $failed > 0
             ? self::FAILURE
             : self::SUCCESS;
     }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)

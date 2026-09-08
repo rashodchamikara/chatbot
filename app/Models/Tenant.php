@@ -18,11 +18,8 @@ class Tenant extends Model
         'api_key',
     ];
 
-<<<<<<< HEAD
    
 
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     public function websites(): HasMany
     {
         return $this->hasMany(
@@ -44,7 +41,6 @@ class Tenant extends Model
         );
     }
 
-<<<<<<< HEAD
     
 
     public function aiAgents(): HasMany
@@ -52,27 +48,17 @@ class Tenant extends Model
         return $this->hasMany(
             AiAgent::class
         );
-=======
-    public function aiAgents(): HasMany
-    {
-        return $this->hasMany(AiAgent::class);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     }
 
     public function channelConnections(): HasMany
     {
-<<<<<<< HEAD
         return $this->hasMany(
             ChannelConnection::class
         );
-=======
-        return $this->hasMany(ChannelConnection::class);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     }
 
     public function contacts(): HasMany
     {
-<<<<<<< HEAD
         return $this->hasMany(
             Contact::class
         );
@@ -83,21 +69,12 @@ class Tenant extends Model
         return $this->hasMany(
             ContactIdentity::class
         );
-=======
-        return $this->hasMany(Contact::class);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     }
 
     public function conversations(): HasMany
     {
-<<<<<<< HEAD
         return $this->hasMany(
             Conversation::class
         );
     }
 }
-=======
-        return $this->hasMany(Conversation::class);
-    }
-}
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)

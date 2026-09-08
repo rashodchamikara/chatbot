@@ -2,20 +2,11 @@
 
 namespace App\Models;
 
-<<<<<<< HEAD
-=======
-use Illuminate\Database\Eloquent\Factories\HasFactory;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InboundWebhookEvent extends Model
 {
-<<<<<<< HEAD
-=======
-    use HasFactory;
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     protected $fillable = [
         'channel_connection_id',
         'provider',
@@ -35,34 +26,70 @@ class InboundWebhookEvent extends Model
     ];
 
     protected $casts = [
-<<<<<<< HEAD
-        'headers' => 'array',
-        'metadata' => 'array',
+        /*
+        |--------------------------------------------------------------------------
+        | Webhook data
+        |--------------------------------------------------------------------------
+        |
+        | Provider webhook bodies are stored as JSON in the database.
+        |
+        | Casting payload to array is especially important for WhatsApp/
+        | Meta webhooks because their payloads contain deeply nested
+        | structures such as:
+        |
+        | entry
+        |   -> changes
+        |       -> value
+        |           -> metadata
+        |           -> contacts
+        |           -> messages
+        |           -> statuses
+        |
+        */
 
-        'attempts' => 'integer',
-
-=======
         'payload' => 'array',
+
+        /*
+         * HTTP/request headers captured with the webhook.
+         */
         'headers' => 'array',
+
+        /*
+         * Internal application metadata associated with
+         * processing the webhook.
+         */
         'metadata' => 'array',
+
+        /*
+        |--------------------------------------------------------------------------
+        | Processing state
+        |--------------------------------------------------------------------------
+        */
+
         'attempts' => 'integer',
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
+
+        /*
+        |--------------------------------------------------------------------------
+        | Processing timestamps
+        |--------------------------------------------------------------------------
+        */
+
         'received_at' => 'datetime',
+
         'processing_started_at' => 'datetime',
+
         'processed_at' => 'datetime',
+
         'failed_at' => 'datetime',
     ];
 
+    /**
+     * Channel connection that received this webhook.
+     */
     public function channelConnection(): BelongsTo
     {
-<<<<<<< HEAD
         return $this->belongsTo(
             ChannelConnection::class
         );
     }
 }
-=======
-        return $this->belongsTo(ChannelConnection::class);
-    }
-}
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)

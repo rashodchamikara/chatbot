@@ -13,7 +13,6 @@ use RuntimeException;
 
 class WebsiteOmnichannelProvisioner
 {
-<<<<<<< HEAD
     /**
      * Create or synchronize the native website
      * omnichannel infrastructure.
@@ -22,8 +21,6 @@ class WebsiteOmnichannelProvisioner
      *   -> AiAgent
      *   -> ChannelConnection
      */
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     public function provision(
         Website $website
     ): ChannelConnection {
@@ -34,7 +31,6 @@ class WebsiteOmnichannelProvisioner
         }
 
         return DB::transaction(
-<<<<<<< HEAD
             function () use (
                 $website
             ): ChannelConnection {
@@ -55,13 +51,6 @@ class WebsiteOmnichannelProvisioner
                         )
                         ->lockForUpdate()
                         ->first();
-=======
-            function () use ($website): ChannelConnection {
-                $website = Website::withTrashed()
-                    ->whereKey($website->getKey())
-                    ->lockForUpdate()
-                    ->first();
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                 if (!$website) {
                     throw new RuntimeException(
@@ -75,7 +64,6 @@ class WebsiteOmnichannelProvisioner
                     );
                 }
 
-<<<<<<< HEAD
                 /*
                 |--------------------------------------------------------------------------
                 | Find existing website channel
@@ -126,28 +114,11 @@ class WebsiteOmnichannelProvisioner
                  * This prevents unnecessary duplicate agents if
                  * website.ai_agent_id was accidentally cleared.
                  */
-=======
-                $connection = ChannelConnection::query()
-                    ->where('website_id', $website->id)
-                    ->where('type', ChannelType::Website->value)
-                    ->first();
-
-                $agent = null;
-
-                if ($website->ai_agent_id) {
-                    $agent = AiAgent::query()
-                        ->whereKey($website->ai_agent_id)
-                        ->where('tenant_id', $website->tenant_id)
-                        ->first();
-                }
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 if (
                     !$agent
                     && $connection
                     && $connection->ai_agent_id
                 ) {
-<<<<<<< HEAD
                     $agent =
                         AiAgent::query()
                             ->whereKey(
@@ -204,32 +175,10 @@ class WebsiteOmnichannelProvisioner
                         $website->name
                         . ' AI Agent'
                     );
-=======
-                    $agent = AiAgent::query()
-                        ->whereKey($connection->ai_agent_id)
-                        ->where('tenant_id', $website->tenant_id)
-                        ->first();
-                }
-
-                if (!$agent) {
-                    $agent = new AiAgent();
-                    $agent->tenant_id = $website->tenant_id;
-                    $agent->status = 'active';
-                    $agent->default_language = 'en';
-                    $agent->model_settings = [];
-                    $agent->handover_settings = [];
-                    $agent->business_hours = [];
-                }
-
-                $agent->name =
-                    trim((string) $website->chatbot_name)
-                    ?: ($website->name . ' AI Agent');
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                 $agent->instructions =
                     $website->chatbot_instructions;
 
-<<<<<<< HEAD
                 /*
                  * Preserve future handover configuration.
                  */
@@ -237,25 +186,16 @@ class WebsiteOmnichannelProvisioner
                     is_array(
                         $agent->handover_settings
                     )
-=======
-                $handoverSettings =
-                    is_array($agent->handover_settings)
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                         ? $agent->handover_settings
                         : [];
 
                 $handoverSettings['enabled'] =
-<<<<<<< HEAD
                     (bool)
                     $website->live_chat_enabled;
-=======
-                    (bool) $website->live_chat_enabled;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                 $agent->handover_settings =
                     $handoverSettings;
 
-<<<<<<< HEAD
                 /*
                  * Avoid wiping future model settings.
                  */
@@ -275,19 +215,10 @@ class WebsiteOmnichannelProvisioner
                 ) {
                     $agent->business_hours =
                         [];
-=======
-                if (!is_array($agent->model_settings)) {
-                    $agent->model_settings = [];
-                }
-
-                if (!is_array($agent->business_hours)) {
-                    $agent->business_hours = [];
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 }
 
                 $agent->save();
 
-<<<<<<< HEAD
                 /*
                 |--------------------------------------------------------------------------
                 | Link Website -> AI Agent
@@ -320,22 +251,6 @@ class WebsiteOmnichannelProvisioner
                 if (!$connection) {
                     $connection =
                         new ChannelConnection();
-=======
-                if (
-                    (int) $website->ai_agent_id
-                    !== (int) $agent->id
-                ) {
-                    /*
-                     * saveQuietly prevents the observer from re-entering
-                     * provisioning only because ai_agent_id changed.
-                     */
-                    $website->ai_agent_id = $agent->id;
-                    $website->saveQuietly();
-                }
-
-                if (!$connection) {
-                    $connection = new ChannelConnection();
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 }
 
                 $connection->tenant_id =
@@ -350,17 +265,13 @@ class WebsiteOmnichannelProvisioner
                 $connection->type =
                     ChannelType::Website->value;
 
-<<<<<<< HEAD
                 /*
                  * Native = our own website widget.
                  */
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 $connection->provider =
                     'native';
 
                 $connection->name =
-<<<<<<< HEAD
                     (string)
                     $website->name;
 
@@ -413,36 +324,10 @@ class WebsiteOmnichannelProvisioner
                     is_array(
                         $connection->settings
                     )
-=======
-                    (string) $website->name;
-
-                if ($website->trashed()) {
-                    $connection->status =
-                        ChannelConnectionStatus::Disconnected->value;
-                } elseif ($website->is_active) {
-                    $connection->status =
-                        ChannelConnectionStatus::Active->value;
-                } else {
-                    $connection->status =
-                        ChannelConnectionStatus::Suspended->value;
-                }
-
-                $connection->external_sender_id =
-                    $website->embed_token;
-
-                if (!$connection->webhook_key) {
-                    $connection->webhook_key =
-                        (string) Str::ulid();
-                }
-
-                $settings =
-                    is_array($connection->settings)
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                         ? $connection->settings
                         : [];
 
                 $settings['domain'] =
-<<<<<<< HEAD
                     (string)
                     $website->domain;
 
@@ -453,15 +338,6 @@ class WebsiteOmnichannelProvisioner
                 $settings['live_chat_enabled'] =
                     (bool)
                     $website->live_chat_enabled;
-=======
-                    (string) $website->domain;
-
-                $settings['verify_domain'] =
-                    (bool) $website->verify_domain;
-
-                $settings['live_chat_enabled'] =
-                    (bool) $website->live_chat_enabled;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                 $settings['chatbot_name'] =
                     $website->chatbot_name;
@@ -475,7 +351,6 @@ class WebsiteOmnichannelProvisioner
                 $connection->settings =
                     $settings;
 
-<<<<<<< HEAD
                 if (
                     !$connection->connected_at
                 ) {
@@ -486,13 +361,6 @@ class WebsiteOmnichannelProvisioner
                 $connection->last_error =
                     null;
 
-=======
-                if (!$connection->connected_at) {
-                    $connection->connected_at = now();
-                }
-
-                $connection->last_error = null;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 $connection->save();
 
                 return $connection->fresh();
@@ -500,17 +368,13 @@ class WebsiteOmnichannelProvisioner
         );
     }
 
-<<<<<<< HEAD
     /**
      * Disconnect website channel when website is deleted.
      */
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     public function disconnect(
         Website $website
     ): void {
         ChannelConnection::query()
-<<<<<<< HEAD
             ->where(
                 'website_id',
                 $website->id
@@ -529,14 +393,3 @@ class WebsiteOmnichannelProvisioner
             ]);
     }
 }
-=======
-            ->where('website_id', $website->id)
-            ->where('type', ChannelType::Website->value)
-            ->update([
-                'status' =>
-                    ChannelConnectionStatus::Disconnected->value,
-                'last_error' => null,
-            ]);
-    }
-}
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)

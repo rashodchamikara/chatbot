@@ -8,11 +8,7 @@ use App\Events\LiveAgentRequested;
 use App\Events\OmnichannelMessageChanged;
 use App\Models\Conversation;
 use App\Models\Message;
-<<<<<<< HEAD
 use App\Models\Website;
-=======
-use App\Data\Omnichannel\InboundMessageData;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 use App\Services\AgentAvailabilityService;
 use App\Services\Knowledge\KnowledgeContextBuilder;
 use App\Services\Knowledge\KnowledgeRetriever;
@@ -22,42 +18,23 @@ use App\Services\Omnichannel\InboundMessageService;
 use App\Services\Omnichannel\OutboundMessageService;
 use App\Services\Omnichannel\WebsiteConversationResolver;
 use App\Services\SalesBrainService;
-<<<<<<< HEAD
 use App\Support\Omnichannel\WebsiteIdentity;
-=======
-use App\Services\Omnichannel\ChannelManager;
-use App\Services\Omnichannel\InboundMessageService;
-use App\Services\Omnichannel\OutboundMessageService;
-use App\Services\Omnichannel\WebsiteConversationResolver;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-<<<<<<< HEAD
 use RuntimeException;
 use Throwable;
-=======
-use App\Services\Knowledge\KnowledgeContextBuilder;
-use App\Services\Knowledge\KnowledgeRetriever;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
 class ChatController extends Controller
 {
     public function __construct(
         private readonly KnowledgeRetriever $knowledgeRetriever,
         private readonly KnowledgeContextBuilder $contextBuilder,
-<<<<<<< HEAD
         private readonly ChannelManager $channelManager,
         private readonly InboundMessageService $inboundMessageService,
         private readonly OutboundMessageService $outboundMessageService,
         private readonly WebsiteConversationResolver $websiteConversationResolver,
-=======
-        private readonly WebsiteConversationResolver $websiteConversationResolver,
-        private readonly ChannelManager $channelManager,
-        private readonly InboundMessageService $inboundMessageService,
-        private readonly OutboundMessageService $outboundMessageService,
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     ) {
     }
 
@@ -69,15 +46,12 @@ class ChatController extends Controller
         SalesBrainService $brain,
         LeadCaptureService $leadCaptureService
     ): JsonResponse {
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Validate widget request
         |--------------------------------------------------------------------------
         */
 
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
         $validated = $request->validate([
             'message' => [
                 'required',
@@ -104,7 +78,6 @@ class ChatController extends Controller
             ],
         ]);
 
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Resolve Website from embed-token middleware
@@ -114,9 +87,6 @@ class ChatController extends Controller
         $website = $this->resolveWebsite(
             $request
         );
-=======
-        $website = $this->resolveWebsite($request);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
         if (!$website) {
             return response()->json([
@@ -126,7 +96,6 @@ class ChatController extends Controller
         }
 
         /*
-<<<<<<< HEAD
         |--------------------------------------------------------------------------
         | Resolve Website omnichannel conversation
         |--------------------------------------------------------------------------
@@ -234,57 +203,6 @@ class ChatController extends Controller
                 )
                 ->values()
                 ->toArray();
-=======
-         * Ensure the website has its native omnichannel connection,
-         * contact identity and conversation while preserving the
-         * legacy website_id + visitor_id lookup.
-         */
-        $conversation =
-            $this->websiteConversationResolver
-                ->resolve(
-                    $website,
-                    $validated['visitor_id']
-                );
-
-        if (!$conversation->mode) {
-            $conversation->forceFill([
-                'mode' => 'ai',
-            ])->save();
-        }
-
-        /*
-         * Load history before saving the current inbound message so
-         * the current visitor message is not sent to the AI twice.
-         */
-        $history = Message::query()
-            ->where(
-                'conversation_id',
-                $conversation->id
-            )
-            ->where('is_system', false)
-            ->whereIn('sender', [
-                'visitor',
-                'ai',
-                'agent',
-            ])
-            ->latest('id')
-            ->limit(10)
-            ->get()
-            ->reverse()
-            ->map(function (Message $message): array {
-                return [
-                    'role' =>
-                        $message->sender === 'visitor'
-                            ? 'user'
-                            : 'assistant',
-
-                    'content' =>
-                        $message->message,
-                ];
-            })
-            ->values()
-            ->toArray();
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
         $connection =
             $this->websiteConversationResolver
@@ -312,7 +230,6 @@ class ChatController extends Controller
         }
 
         /*
-<<<<<<< HEAD
         |--------------------------------------------------------------------------
         | Resolve WebsiteAdapter
         |--------------------------------------------------------------------------
@@ -418,34 +335,6 @@ class ChatController extends Controller
         |--------------------------------------------------------------------------
         */
 
-=======
-         * Store the visitor message through the common omnichannel
-         * inbound pipeline. This creates the new omnichannel fields
-         * while preserving legacy sender values.
-         */
-        $visitorMessage =
-            $this->inboundMessageService
-                ->handle(
-                    $connection,
-                    $inboundData
-                );
-
-        $conversation =
-            $visitorMessage->conversation
-            ?? $conversation;
-
-        $conversation->refresh();
-
-        /*
-         * Preserve the existing public website conversation event.
-         */
-        broadcast(
-            new ConversationMessageCreated(
-                $visitorMessage
-            )
-        );
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
         if (
             in_array(
                 $conversation->mode,
@@ -484,7 +373,6 @@ class ChatController extends Controller
             ]);
         }
 
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Lead capture
@@ -499,15 +387,6 @@ class ChatController extends Controller
                     $validated['message']
                 );
 
-=======
-        $leadResult =
-            $leadCaptureService->processMessage(
-                $website,
-                $conversation,
-                $validated['message']
-            );
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
         $lead =
             $leadResult['lead']
             ?? null;
@@ -521,15 +400,12 @@ class ChatController extends Controller
             $leadResult['next_question']
             ?? null;
 
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Knowledge retrieval
         |--------------------------------------------------------------------------
         */
 
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
         $knowledgeResults = [];
 
         $knowledgeContext =
@@ -545,7 +421,6 @@ class ChatController extends Controller
                     );
 
             $knowledgeContext =
-<<<<<<< HEAD
                 $this
                     ->contextBuilder
                     ->build(
@@ -555,12 +430,6 @@ class ChatController extends Controller
             /*
              * Chat should continue even when knowledge retrieval fails.
              */
-=======
-                $knowledgeContextBuilder->build(
-                    $knowledgeResults
-                );
-        } catch (\Throwable $exception) {
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
             Log::error(
                 'Knowledge retrieval failed.',
                 [
@@ -576,7 +445,6 @@ class ChatController extends Controller
             );
         }
 
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Generate AI response
@@ -631,20 +499,6 @@ class ChatController extends Controller
                 (string)
                 $aiText
             );
-=======
-        $aiText = $brain->analyze(
-            $validated['message'],
-            $website,
-            $history,
-            $lead,
-            $leadStage,
-            $nextLeadQuestion,
-            $knowledgeContext
-        );
-
-        $aiText =
-            trim((string) $aiText);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
         if ($aiText === '') {
             $aiText =
@@ -652,7 +506,6 @@ class ChatController extends Controller
         }
 
         /*
-<<<<<<< HEAD
         |--------------------------------------------------------------------------
         | Persist and deliver AI response
         |--------------------------------------------------------------------------
@@ -734,43 +587,6 @@ class ChatController extends Controller
             'success' =>
                 true,
 
-=======
-         * Save/send the AI reply through the common outbound service.
-         * WebsiteAdapter keeps the existing Reverb widget event.
-         */
-        $aiMessage =
-            $this->outboundMessageService
-                ->send(
-                    conversation:
-                        $conversation,
-
-                    body:
-                        $aiText,
-
-                    senderType:
-                        'ai',
-
-                    senderUserId:
-                        null,
-
-                    isAiGenerated:
-                        true,
-
-                    attachments:
-                        [],
-
-                    metadata: [
-                        'source' =>
-                            'website_ai',
-                    ],
-                );
-
-        $conversation->refresh();
-
-        return response()->json([
-            'success' => true,
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
             'reply' =>
                 $aiMessage->message,
 
@@ -828,14 +644,9 @@ class ChatController extends Controller
         ]);
     }
 
-<<<<<<< HEAD
     /**
      * Return public widget configuration.
      */
-=======
-
-  
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     public function config(
         Request $request,
         AgentAvailabilityService $agentAvailability
@@ -1130,7 +941,6 @@ class ChatController extends Controller
             ], 409);
         }
 
-<<<<<<< HEAD
         /*
          * Live-agent request is a genuine visitor
          * interaction, so creating/upgrading the
@@ -1290,151 +1100,10 @@ class ChatController extends Controller
                     ];
                 }
             );
-=======
-        $baseConversation =
-            $this->websiteConversationResolver
-                ->resolve(
-                    $website,
-                    $validated['visitor_id']
-                );
-
-        $result = DB::transaction(
-            function () use (
-                $baseConversation
-            ): array {
-                $conversation =
-                    Conversation::query()
-                        ->lockForUpdate()
-                        ->findOrFail(
-                            $baseConversation->id
-                        );
-
-                if ($conversation->mode === 'live') {
-                    return [
-                        'conversation' =>
-                            $conversation,
-
-                        'message' =>
-                            null,
-
-                        'already_requested' =>
-                            true,
-
-                        'response_message' =>
-                            'A live agent is already handling this conversation.',
-                    ];
-                }
-
-                if (
-                    $conversation->mode
-                    === 'live_waiting'
-                ) {
-                    return [
-                        'conversation' =>
-                            $conversation,
-
-                        'message' =>
-                            null,
-
-                        'already_requested' =>
-                            true,
-
-                        'response_message' =>
-                            'A live agent has already been notified. Please wait a moment.',
-                    ];
-                }
-
-                $conversation->update([
-                    'mode' =>
-                        'live_waiting',
-
-                    'assigned_agent_id' =>
-                        null,
-
-                    'live_requested_at' =>
-                        now(),
-
-                    'live_started_at' =>
-                        null,
-
-                    'live_ended_at' =>
-                        null,
-                ]);
-
-                $systemMessage =
-                    Message::create([
-                        'conversation_id' =>
-                            $conversation->id,
-
-                        'channel_connection_id' =>
-                            $conversation->channel_connection_id,
-
-                        'user_id' =>
-                            null,
-
-                        'sender_user_id' =>
-                            null,
-
-                        'sender' =>
-                            'system',
-
-                        'role' =>
-                            'assistant',
-
-                        'direction' =>
-                            'outbound',
-
-                        'sender_type' =>
-                            'system',
-
-                        'message_type' =>
-                            'text',
-
-                        'status' =>
-                            'sent',
-
-                        'provider_status' =>
-                            'sent',
-
-                        'is_ai_generated' =>
-                            false,
-
-                        'is_system' =>
-                            true,
-
-                        'message' =>
-                            'Visitor requested a live agent.',
-
-                        'sent_at' =>
-                            now(),
-
-                        'payload' => [
-                            'internal_event' =>
-                                'live_agent_requested',
-                        ],
-                    ]);
-
-                return [
-                    'conversation' =>
-                        $conversation->fresh(),
-
-                    'message' =>
-                        $systemMessage,
-
-                    'already_requested' =>
-                        false,
-
-                    'response_message' =>
-                        'A live agent has been notified. Please wait a moment.',
-                ];
-            }
-        );
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
         $conversation =
             $result['conversation'];
 
-<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Broadcast live-agent request
@@ -1444,19 +1113,12 @@ class ChatController extends Controller
         if (
             !$result['already_requested']
         ) {
-=======
-        if (!$result['already_requested']) {
-            $systemMessage =
-                $result['message'];
-
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
             broadcast(
                 new ConversationMessageCreated(
                     $systemMessage
                 )
             );
 
-<<<<<<< HEAD
             /*
              * Also publish to the new omnichannel inbox.
              */
@@ -1464,25 +1126,6 @@ class ChatController extends Controller
                 $result['message'],
                 'created'
             );
-=======
-            try {
-                OmnichannelMessageChanged::dispatch(
-                    $systemMessage,
-                    'created'
-                );
-            } catch (\Throwable $exception) {
-                Log::warning(
-                    'Live-agent system message omnichannel broadcast failed.',
-                    [
-                        'message_id' =>
-                            $systemMessage->id,
-
-                        'error' =>
-                            $exception->getMessage(),
-                    ]
-                );
-            }
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
             broadcast(
                 new ConversationModeChanged(
@@ -1524,7 +1167,6 @@ class ChatController extends Controller
         ]);
     }
 
-<<<<<<< HEAD
     /**
      * Find an existing website conversation without
      * creating one.
@@ -1586,13 +1228,6 @@ class ChatController extends Controller
             )
             ->orderBy('id')
             ->first();
-=======
-
-    private function resolveWebsite(Request $request)
-    {
-        return $request->website
-            ?? $request->attributes->get('website');
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     }
 
     /**
