@@ -1,0 +1,30 @@
+[33m2e8e165[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/hotfix/tenant-admin-new-tenant-flow[m[33m, [m[1;32mhotfix/tenant-admin-new-tenant-flow[m[33m)[m HEAD@{Thu Sep 3 12:46:00 2026}: merge hotfix/tenant-admin-new-tenant-flow: Fast-forward
+[33m47cbb84[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{Thu Sep 3 12:45:18 2026}: checkout: moving from feature/omnichannel-sprint-3-website to main
+[33mef0d54a[m[33m ([m[1;32mfeature/omnichannel-sprint-3-website[m[33m)[m HEAD@{Thu Sep 3 12:45:10 2026}: commit: merging test
+[33m3b10431[m[33m ([m[1;31morigin/feature/omnichannel-inbox[m[33m, [m[1;32mfeature/omnichannel-inbox[m[33m)[m HEAD@{Mon Aug 31 14:01:52 2026}: checkout: moving from feature/omnichannel-inbox to feature/omnichannel-sprint-3-website
+[33m3b10431[m[33m ([m[1;31morigin/feature/omnichannel-inbox[m[33m, [m[1;32mfeature/omnichannel-inbox[m[33m)[m HEAD@{Mon Aug 31 14:00:37 2026}: commit: sprint2 done
+[33m60f6070[m HEAD@{Sun Aug 16 16:17:17 2026}: commit: migration added
+[33m3382cb7[m HEAD@{Sun Aug 16 16:08:01 2026}: pull origin feature/omnichannel-inbox: Fast-forward
+[33mae9f7f7[m HEAD@{Sun Aug 16 15:43:09 2026}: commit: Channel manager added
+[33maec547c[m HEAD@{Sun Aug 16 15:00:33 2026}: checkout: moving from hotfix/tenant-admin-new-tenant-flow to feature/omnichannel-inbox
+[33m2e8e165[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/hotfix/tenant-admin-new-tenant-flow[m[33m, [m[1;32mhotfix/tenant-admin-new-tenant-flow[m[33m)[m HEAD@{Sun Aug 16 11:33:26 2026}: commit: Fix tenant admin onboarding with optional new tenant creation
+[33m47cbb84[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{Sun Aug 16 11:17:30 2026}: checkout: moving from main to hotfix/tenant-admin-new-tenant-flow
+[33m47cbb84[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{Sun Aug 16 11:17:02 2026}: checkout: moving from feature/omnichannel-inbox to main
+[33maec547c[m HEAD@{Sun Aug 16 10:44:59 2026}: pull origin feature/omnichannel-inbox: Fast-forward
+[33m4340882[m HEAD@{Mon Aug 10 15:32:51 2026}: commit: Fixed migrations added
+[33md19c34d[m HEAD@{Sat Aug 8 11:23:15 2026}: commit: chore: prepare omnichannel feature rollout
+[33m47cbb84[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{Sat Aug 8 11:19:29 2026}: checkout: moving from main to feature/omnichannel-inbox
+[33m47cbb84[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{Sat Aug 8 11:19:01 2026}: checkout: moving from main to main
+[33m47cbb84[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{Mon Aug 3 17:00:28 2026}: commit: minor fix
+[33m1691236[m HEAD@{Mon Aug 3 16:55:33 2026}: commit: Update for user managemenet
+[33m99039f4[m HEAD@{Mon Aug 3 15:42:51 2026}: commit: navigation and routes fixes
+[33mf1a39b4[m HEAD@{Mon Aug 3 15:31:36 2026}: commit: Navigation fix
+[33m3944578[m HEAD@{Mon Aug 3 15:06:50 2026}: commit: more admin management added
+[33m9ad6e18[m HEAD@{Fri Jul 24 14:39:12 2026}: commit: knowladge service bug fixes
+[33m32518c0[m HEAD@{Fri Jul 24 13:05:50 2026}: commit: bug fixes
+[33m038f269[m HEAD@{Fri Jul 24 13:02:24 2026}: commit: bug fixes
+[33m888dae8[m HEAD@{Fri Jul 24 12:43:56 2026}: commit: Error fix
+[33mf774ea1[m HEAD@{Fri Jul 24 12:07:37 2026}: commit: bug fixes
+[33m02833bd[m HEAD@{Fri Jul 24 11:35:40 2026}: commit: Bug Fixing
+[33m25565e0[m HEAD@{Thu Jul 23 15:40:41 2026}: commit: error fix
+[33m8ac8383[m HEAD@{Wed Jul 22 16:18:34 2026}: commit: model update

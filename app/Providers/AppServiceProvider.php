@@ -2,6 +2,11 @@
 
 namespace App\Providers;
 
+<<<<<<< HEAD
+=======
+use App\Models\Website;
+use App\Observers\WebsiteObserver;
+>>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 use App\Services\Knowledge\Extraction\DocxExtractor;
 use App\Services\Knowledge\Extraction\ExtractorManager;
 use App\Services\Knowledge\Extraction\ImageOcrExtractor;
@@ -12,8 +17,11 @@ use App\Services\Omnichannel\Adapters\WebsiteAdapter;
 use App\Services\Omnichannel\ChannelManager;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+<<<<<<< HEAD
 use App\Models\Website;
 use App\Observers\WebsiteObserver;
+=======
+>>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,9 +35,13 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(
             ExtractorManager::class,
+<<<<<<< HEAD
             function (
                 $app
             ): ExtractorManager {
+=======
+            function ($app): ExtractorManager {
+>>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 return new ExtractorManager(
                     pdfExtractor:
                         $app->make(
@@ -59,6 +71,7 @@ class AppServiceProvider extends ServiceProvider
             }
         );
 
+<<<<<<< HEAD
         /*
         |--------------------------------------------------------------------------
         | Omnichannel ChannelManager
@@ -76,6 +89,11 @@ class AppServiceProvider extends ServiceProvider
             function (
                 $app
             ): ChannelManager {
+=======
+        $this->app->singleton(
+            ChannelManager::class,
+            function ($app): ChannelManager {
+>>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                 $manager =
                     new ChannelManager();
 
@@ -92,6 +110,7 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+<<<<<<< HEAD
         Schema::defaultStringLength(
             191
         );
@@ -102,8 +121,16 @@ class AppServiceProvider extends ServiceProvider
         |--------------------------------------------------------------------------
         */
 
+=======
+        Schema::defaultStringLength(191);
+
+>>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
         Website::observe(
             WebsiteObserver::class
         );
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
