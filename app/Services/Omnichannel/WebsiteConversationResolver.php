@@ -2,98 +2,103 @@
 
 namespace App\Services\Omnichannel;
 
-<<<<<<< HEAD
-=======
 use App\Enums\ChannelType;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 use App\Models\ChannelConnection;
 use App\Models\Contact;
 use App\Models\ContactIdentity;
 use App\Models\Conversation;
 use App\Models\Website;
-<<<<<<< HEAD
-use App\Support\Omnichannel\WebsiteIdentity;
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class WebsiteConversationResolver
 {
-<<<<<<< HEAD
-    /**
-     * Resolve the active native website channel.
-     */
-    public function connectionFor(
-        Website $website
-    ): ChannelConnection {
-        $connection =
-            ChannelConnection::query()
-                ->where(
-                    'website_id',
-                    $website->id
-                )
-                ->where(
-                    'tenant_id',
-                    $website->tenant_id
-                )
-                ->where(
-                    'type',
-                    'website'
-                )
-                ->where(
-                    'status',
-                    'active'
-                )
-                ->first();
-
-        if (!$connection) {
-            throw new RuntimeException(
-                "No active website channel connection exists for website [{$website->id}]. "
-                . 'Run omnichannel:backfill-website-agents first.'
-            );
-=======
     public function __construct(
         protected WebsiteOmnichannelProvisioner $provisioner
     ) {
     }
 
+    /**
+     * Resolve the native omnichannel connection belonging
+     * to the website.
+     *
+     * If it does not exist yet, provision it automatically.
+     */
     public function resolveConnection(
         Website $website
     ): ChannelConnection {
+        if (!$website->exists) {
+            throw new RuntimeException(
+                'Website must exist before resolving its channel connection.'
+            );
+        }
+
+        if (!$website->tenant_id) {
+            throw new RuntimeException(
+                "Website [{$website->id}] does not have a tenant."
+            );
+        }
+
         $connection = ChannelConnection::query()
-            ->where('website_id', $website->id)
-            ->where('type', ChannelType::Website->value)
+            ->where(
+                'website_id',
+                $website->id
+            )
+            ->where(
+                'tenant_id',
+                $website->tenant_id
+            )
+            ->where(
+                'type',
+                ChannelType::Website->value
+            )
             ->first();
 
         if (!$connection) {
-            $connection = $this->provisioner->provision($website);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
+            $connection =
+                $this->provisioner
+                    ->provision(
+                        $website
+                    );
+        }
+
+        if (
+            strtolower(
+                trim(
+                    (string) $connection->status
+                )
+            ) !== 'active'
+        ) {
+            throw new RuntimeException(
+                "Website channel connection [{$connection->id}] is not active."
+            );
+        }
+
+        if (!$connection->ai_agent_id) {
+            throw new RuntimeException(
+                "Website channel connection [{$connection->id}] has no AI agent."
+            );
         }
 
         return $connection;
     }
 
-<<<<<<< HEAD
     /**
-     * Resolve/create the Contact, ContactIdentity and
-     * Conversation for one website visitor.
+     * Resolve/create the omnichannel Contact,
+     * ContactIdentity and Conversation associated with
+     * one website visitor.
      *
-     * This also upgrades old website conversations
-     * lazily when they are encountered.
+     * Existing legacy website conversations are upgraded
+     * lazily instead of being discarded.
      */
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
     public function resolve(
         Website $website,
         string $visitorId
     ): Conversation {
-<<<<<<< HEAD
         $visitorId =
-            trim($visitorId);
-=======
-        $visitorId = trim($visitorId);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
+            trim(
+                $visitorId
+            );
 
         if ($visitorId === '') {
             throw new RuntimeException(
@@ -102,143 +107,59 @@ class WebsiteConversationResolver
         }
 
         $connection =
-<<<<<<< HEAD
-            $this->connectionFor(
+            $this->resolveConnection(
                 $website
             );
 
+        /*
+         * For the native website channel the visitor ID is
+         * both the external contact identity and the thread
+         * identity.
+         */
         $externalContactId =
-            WebsiteIdentity::externalContactId(
-                $visitorId
-            );
+            $visitorId;
 
         $externalThreadId =
-            WebsiteIdentity::externalThreadId(
-                $website->id,
-                $visitorId
-            );
-=======
-            $this->resolveConnection($website);
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
+            $visitorId;
 
         return DB::transaction(
             function () use (
                 $website,
                 $visitorId,
-<<<<<<< HEAD
                 $connection,
                 $externalContactId,
                 $externalThreadId
             ): Conversation {
                 /*
                 |--------------------------------------------------------------------------
-                | Look for the new omnichannel conversation first
+                | Find current omnichannel conversation
                 |--------------------------------------------------------------------------
                 */
 
                 $conversation =
                     Conversation::query()
-=======
-                $connection
-            ): Conversation {
-                $identity = ContactIdentity::query()
-                    ->where(
-                        'tenant_id',
-                        $website->tenant_id
-                    )
-                    ->where(
-                        'channel_connection_id',
-                        $connection->id
-                    )
-                    ->where(
-                        'external_user_id',
-                        $visitorId
-                    )
-                    ->first();
-
-                if (!$identity) {
-                    $contact = Contact::create([
-                        'tenant_id' =>
-                            $website->tenant_id,
-
-                        'name' => null,
-                        'email' => null,
-                        'phone' => null,
-                        'company' => null,
-                        'status' => 'active',
-
-                        'metadata' => [
-                            'source' => 'website',
-                            'website_id' => $website->id,
-                        ],
-                    ]);
-
-                    $identity =
-                        ContactIdentity::create([
-                            'tenant_id' =>
-                                $website->tenant_id,
-
-                            'contact_id' =>
-                                $contact->id,
-
-                            'channel_connection_id' =>
-                                $connection->id,
-
-                            'channel' =>
-                                ChannelType::Website->value,
-
-                            'external_user_id' =>
-                                $visitorId,
-
-                            'display_name' =>
-                                null,
-
-                            'username' =>
-                                null,
-
-                            'normalized_address' =>
-                                $visitorId,
-
-                            'is_verified' =>
-                                false,
-
-                            'metadata' => [
-                                'provider' =>
-                                    $connection->provider ?: 'native',
-
-                                'website_id' =>
-                                    $website->id,
-                            ],
-                        ]);
-                }
-
-                $conversation = Conversation::query()
-                    ->where('website_id', $website->id)
-                    ->where('visitor_id', $visitorId)
-                    ->first();
-
-                if (!$conversation) {
-                    $conversation = Conversation::query()
                         ->where(
                             'tenant_id',
                             $website->tenant_id
                         )
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                         ->where(
                             'channel_connection_id',
                             $connection->id
                         )
                         ->where(
                             'external_thread_id',
-<<<<<<< HEAD
                             $externalThreadId
+                        )
+                        ->where(
+                            'status',
+                            'active'
                         )
                         ->lockForUpdate()
                         ->first();
 
                 /*
                 |--------------------------------------------------------------------------
-                | Fall back to the legacy website conversation
+                | Fall back to existing legacy website conversation
                 |--------------------------------------------------------------------------
                 */
 
@@ -253,19 +174,29 @@ class WebsiteConversationResolver
                                 'visitor_id',
                                 $visitorId
                             )
-                            ->orderBy('id')
+                            ->where(
+                                'status',
+                                'active'
+                            )
+                            ->orderBy(
+                                'id'
+                            )
                             ->lockForUpdate()
                             ->first();
                 }
 
                 /*
                 |--------------------------------------------------------------------------
-                | Resolve ContactIdentity
+                | Resolve existing ContactIdentity
                 |--------------------------------------------------------------------------
                 */
 
                 $identity =
                     ContactIdentity::query()
+                        ->where(
+                            'tenant_id',
+                            $website->tenant_id
+                        )
                         ->where(
                             'channel_connection_id',
                             $connection->id
@@ -293,8 +224,9 @@ class WebsiteConversationResolver
                 }
 
                 /*
-                 * An already-upgraded legacy conversation may
-                 * already reference a valid Contact.
+                 * A previously upgraded conversation might
+                 * already reference a Contact even if its
+                 * identity row is missing.
                  */
                 if (
                     !$contact
@@ -315,7 +247,7 @@ class WebsiteConversationResolver
 
                 /*
                 |--------------------------------------------------------------------------
-                | Create Contact if needed
+                | Create Contact
                 |--------------------------------------------------------------------------
                 */
 
@@ -364,15 +296,21 @@ class WebsiteConversationResolver
                     $connection->id;
 
                 $identity->channel =
-                    'website';
+                    ChannelType::Website->value;
 
                 $identity->external_user_id =
                     $externalContactId;
+
+                $identity->normalized_address =
+                    $visitorId;
 
                 if (!$identity->display_name) {
                     $identity->display_name =
                         'Website Visitor';
                 }
+
+                $identity->is_verified =
+                    (bool) $identity->is_verified;
 
                 $identityMetadata =
                     is_array(
@@ -380,6 +318,10 @@ class WebsiteConversationResolver
                     )
                         ? $identity->metadata
                         : [];
+
+                $identityMetadata['provider'] =
+                    $connection->provider
+                    ?: 'native';
 
                 $identityMetadata['website_id'] =
                     $website->id;
@@ -394,29 +336,13 @@ class WebsiteConversationResolver
 
                 /*
                 |--------------------------------------------------------------------------
-                | Create conversation if needed
+                | Create conversation if necessary
                 |--------------------------------------------------------------------------
                 */
 
                 if (!$conversation) {
                     $conversation =
                         new Conversation();
-=======
-                            $visitorId
-                        )
-                        ->where('status', 'active')
-                        ->first();
-                }
-
-                if (!$conversation) {
-                    $conversation = new Conversation();
-
-                    $conversation->website_id =
-                        $website->id;
-
-                    $conversation->visitor_id =
-                        $visitorId;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                     $conversation->status =
                         'active';
@@ -434,25 +360,24 @@ class WebsiteConversationResolver
                         0;
                 }
 
-<<<<<<< HEAD
                 /*
                 |--------------------------------------------------------------------------
-                | Populate both old and new conversation fields
+                | Preserve old website fields
                 |--------------------------------------------------------------------------
                 */
 
                 $conversation->website_id =
                     $website->id;
 
-                /*
-                 * Preserve this field because the current widget,
-                 * views and live-agent events still use visitor_id.
-                 */
                 $conversation->visitor_id =
                     $visitorId;
 
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
+                /*
+                |--------------------------------------------------------------------------
+                | Omnichannel ownership
+                |--------------------------------------------------------------------------
+                */
+
                 $conversation->tenant_id =
                     $website->tenant_id;
 
@@ -463,7 +388,6 @@ class WebsiteConversationResolver
                     $connection->id;
 
                 $conversation->contact_id =
-<<<<<<< HEAD
                     $contact->id;
 
                 $conversation->external_thread_id =
@@ -497,50 +421,37 @@ class WebsiteConversationResolver
                         0;
                 }
 
+                /*
+                |--------------------------------------------------------------------------
+                | Conversation metadata
+                |--------------------------------------------------------------------------
+                */
+
                 $metadata =
                     is_array(
                         $conversation->metadata
                     )
-=======
-                    $identity->contact_id;
-
-                $conversation->external_thread_id =
-                    $visitorId;
-
-                $metadata =
-                    is_array($conversation->metadata)
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
                         ? $conversation->metadata
                         : [];
 
                 $metadata['channel'] =
-<<<<<<< HEAD
-                    'website';
+                    ChannelType::Website->value;
+
+                $metadata['provider'] =
+                    $connection->provider
+                    ?: 'native';
 
                 $metadata['source'] =
                     'website_widget';
 
                 $metadata['visitor_id'] =
                     $visitorId;
-=======
-                    ChannelType::Website->value;
-
-                $metadata['provider'] =
-                    $connection->provider ?: 'native';
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
                 $conversation->metadata =
                     $metadata;
 
                 $conversation->save();
 
-<<<<<<< HEAD
-                return $conversation;
-            }
-        );
-    }
-}
-=======
                 return $conversation->fresh([
                     'channelConnection',
                     'contact',
@@ -549,4 +460,3 @@ class WebsiteConversationResolver
         );
     }
 }
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)

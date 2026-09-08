@@ -4,11 +4,6 @@ namespace App\Observers;
 
 use App\Models\Website;
 use App\Services\Omnichannel\WebsiteOmnichannelProvisioner;
-<<<<<<< HEAD
-=======
-use Illuminate\Support\Facades\Log;
-use Throwable;
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
 
 class WebsiteObserver
 {
@@ -17,7 +12,6 @@ class WebsiteObserver
     ) {
     }
 
-<<<<<<< HEAD
     /**
      * Automatically provision every newly created website.
      */
@@ -57,32 +51,10 @@ class WebsiteObserver
 
             'embed_token',
 
-=======
-    public function created(
-        Website $website
-    ): void {
-        $this->safeProvision($website);
-    }
-
-    public function updated(
-        Website $website
-    ): void {
-        $relevantFields = [
-            'tenant_id',
-            'name',
-            'domain',
-            'verify_domain',
-            'is_active',
-            'embed_token',
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
             'chatbot_name',
             'chatbot_theme',
             'chatbot_avatar',
             'chatbot_instructions',
-<<<<<<< HEAD
-
-=======
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
             'live_chat_enabled',
         ];
 
@@ -94,7 +66,6 @@ class WebsiteObserver
             return;
         }
 
-<<<<<<< HEAD
         $this->provisioner
             ->provision(
                 $website
@@ -127,62 +98,3 @@ class WebsiteObserver
             );
     }
 }
-=======
-        $this->safeProvision($website);
-    }
-
-    public function deleted(
-        Website $website
-    ): void {
-        try {
-            $this->provisioner
-                ->disconnect($website);
-        } catch (Throwable $exception) {
-            Log::error(
-                'Failed to disconnect website omnichannel connection.',
-                [
-                    'website_id' =>
-                        $website->id,
-
-                    'error' =>
-                        $exception->getMessage(),
-                ]
-            );
-        }
-    }
-
-    public function restored(
-        Website $website
-    ): void {
-        $this->safeProvision($website);
-    }
-
-    private function safeProvision(
-        Website $website
-    ): void {
-        try {
-            $this->provisioner
-                ->provision($website);
-        } catch (Throwable $exception) {
-            /*
-             * Do not make normal website create/update fail solely
-             * because omnichannel provisioning failed. The failure is
-             * visible in logs and can be repaired by the backfill command.
-             */
-            Log::error(
-                'Website omnichannel provisioning failed.',
-                [
-                    'website_id' =>
-                        $website->id,
-
-                    'tenant_id' =>
-                        $website->tenant_id,
-
-                    'error' =>
-                        $exception->getMessage(),
-                ]
-            );
-        }
-    }
-}
->>>>>>> b81e2aa (Restore omnichannel Sprint 2 files)
