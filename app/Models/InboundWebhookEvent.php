@@ -1,93 +1,56 @@
 <?php
 
-namespace App\Services\Omnichannel\WhatsApp;
+namespace App\Models;
 
-class WhatsAppWebhookSecurityService
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class InboundWebhookEvent extends Model
 {
-    /**
-     * Validate Meta webhook GET verification.
-     */
-    public function validateChallenge(
-        string $mode,
-        string $providedVerifyToken,
-        string $challenge,
-    ): bool {
-        $configuredVerifyToken = trim(
-            (string) config(
-                'services.meta.webhook_verify_token'
-            )
-        );
+    use HasFactory;
 
-        if ($configuredVerifyToken === '') {
-            return false;
-        }
+    protected $fillable = [
+        'channel_connection_id',
 
-        if (trim($mode) !== 'subscribe') {
-            return false;
-        }
+        'provider',
+        'event_type',
+        'external_event_id',
 
-        if (trim($providedVerifyToken) === '') {
-            return false;
-        }
+        'payload_hash',
+        'payload',
+        'headers',
 
-        if ($challenge === '') {
-            return false;
-        }
+        'status',
+        'attempts',
 
-        return hash_equals(
-            $configuredVerifyToken,
-            trim($providedVerifyToken)
-        );
-    }
+        'received_at',
+        'processing_started_at',
+        'processed_at',
+        'failed_at',
 
-    /**
-     * Validate X-Hub-Signature-256.
-     *
-     * IMPORTANT:
-     * The HMAC must use the exact raw request body.
-     */
-    public function validateSignature(
-        string $rawBody,
-        ?string $providedSignature,
-    ): bool {
-        $appSecret = trim(
-            (string) config(
-                'services.meta.app_secret'
-            )
-        );
+        'last_error',
+        'metadata',
+    ];
 
-        if ($appSecret === '') {
-            return false;
-        }
+    protected $casts = [
+        'headers' => 'array',
+        'metadata' => 'array',
 
-        $providedSignature = trim(
-            (string) $providedSignature
-        );
+        'attempts' => 'integer',
 
-        if ($providedSignature === '') {
-            return false;
-        }
+        'received_at' => 'datetime',
+        'processing_started_at' => 'datetime',
+        'processed_at' => 'datetime',
+        'failed_at' => 'datetime',
+    ];
 
-        if (
-            !str_starts_with(
-                $providedSignature,
-                'sha256='
-            )
-        ) {
-            return false;
-        }
-
-        $expectedSignature =
-            'sha256=' .
-            hash_hmac(
-                'sha256',
-                $rawBody,
-                $appSecret
-            );
-
-        return hash_equals(
-            $expectedSignature,
-            $providedSignature
+    public function channelConnection(): BelongsTo
+    {
+        return $this->belongsTo(
+            ChannelConnection::class
         );
     }
 }
+
+///testing issues
