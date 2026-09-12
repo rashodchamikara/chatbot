@@ -118,19 +118,7 @@ class OutboundMessageService
                 */
 
                 $message->sender =
-                    $isAiGenerated
-                        ? 'assistant'
-                        : 'agent';
-
-                $message->role =
                     'assistant';
-
-                $message->tokens_used =
-                    0;
-
-                $message->is_system =
-                    false;
-                $message->provider_status = 'pending';
 
                 if ($senderUserId !== null) {
                     $message->sender_user_id = $senderUserId;
