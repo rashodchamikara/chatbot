@@ -217,7 +217,7 @@ class InboundMessageService
                 */
 
                 $message->sender =
-                    'user';
+                    'visitor';
 
             
 

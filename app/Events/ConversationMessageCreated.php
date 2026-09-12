@@ -37,6 +37,29 @@ class ConversationMessageCreated implements ShouldBroadcastNow
         return 'conversation.message.created';
     }
 
+    /**
+     * The public website channel is for messages delivered TO the widget.
+     *
+     * Inbound visitor messages are already rendered locally by the widget and
+     * are published separately to the omnichannel/admin inbox. Broadcasting
+     * them here causes the visitor's own text to appear as a reply.
+     */
+    public function broadcastWhen(): bool
+    {
+        if ($this->message->direction === 'inbound') {
+            return false;
+        }
+
+        return !in_array(
+            $this->message->sender,
+            [
+                'visitor',
+                'user',
+            ],
+            true
+        );
+    }
+
     public function broadcastWith(): array
     {
         return [

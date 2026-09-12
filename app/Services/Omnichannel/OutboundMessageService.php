@@ -118,9 +118,21 @@ class OutboundMessageService
                 */
 
                 $message->sender =
-                    'assistant';
+                    $isAiGenerated
+                    || $senderType === 'ai'
+                        ? 'ai'
+                        : (
+                            $senderType === 'system'
+                                ? 'system'
+                                : 'agent'
+                        );
 
                 if ($senderUserId !== null) {
+                    /*
+                     * Keep both fields while the legacy website chat and the
+                     * omnichannel inbox coexist.
+                     */
+                    $message->user_id = $senderUserId;
                     $message->sender_user_id = $senderUserId;
                 }
 
