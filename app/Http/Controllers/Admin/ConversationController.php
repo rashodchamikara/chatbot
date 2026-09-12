@@ -1,52 +1,101 @@
 <?php
+
 namespace App\Http\Controllers\Admin;
 
 use App\Events\ConversationMessageCreated;
 use App\Events\ConversationModeChanged;
+use App\Events\OmnichannelMessageChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Message;
-use App\Models\Website;
+use App\Services\Omnichannel\OutboundMessageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ConversationController extends Controller
 {
-    public function index(Request $request)
-    {
-        $user = $request->user();
+    public function index(
+        Request $request
+    ) {
+        $user =
+            $request->user();
 
-        $query = Conversation::query()
-            ->with([
-                'website.tenant',
-                'lead',
-                'assignedAgent',
-            ])
-            ->withCount('messages');
+        $query =
+            Conversation::query()
+                ->with([
+                    'website.tenant',
+                    'channelConnection',
+                    'contact',
+                    'lead',
+                    'assignedAgent',
+                ])
+                ->withCount(
+                    'messages'
+                );
 
         if (!$user->isSuperAdmin()) {
-            $query->whereHas('website', function ($websiteQuery) use ($user) {
-                $websiteQuery->where('tenant_id', $user->tenant_id);
-            });
+            $query->where(
+                function ($query) use ($user): void {
+                    $query
+                        ->where(
+                            'tenant_id',
+                            $user->tenant_id
+                        )
+                        ->orWhere(
+                            function ($legacy) use ($user): void {
+                                $legacy
+                                    ->whereNull(
+                                        'tenant_id'
+                                    )
+                                    ->whereHas(
+                                        'website',
+                                        function ($websiteQuery) use ($user): void {
+                                            $websiteQuery
+                                                ->where(
+                                                    'tenant_id',
+                                                    $user->tenant_id
+                                                );
+                                        }
+                                    );
+                            }
+                        );
+                }
+            );
         }
 
         if ($request->filled('status')) {
-            $query->where('status', $request->string('status'));
+            $query->where(
+                'status',
+                $request->string(
+                    'status'
+                )
+            );
         }
 
         if ($request->filled('lead_stage')) {
-            $query->where('lead_stage', $request->string('lead_stage'));
+            $query->where(
+                'lead_stage',
+                $request->string(
+                    'lead_stage'
+                )
+            );
         }
 
         if ($request->filled('mode')) {
-            $query->where('mode', $request->string('mode'));
+            $query->where(
+                'mode',
+                $request->string(
+                    'mode'
+                )
+            );
         }
 
-        $conversations = $query
-            ->latest('updated_at')
-            ->paginate(15)
-            ->withQueryString();
+        $conversations =
+            $query
+                ->latest('updated_at')
+                ->paginate(15)
+                ->withQueryString();
 
         return view(
             'admin.conversations.index',
@@ -65,13 +114,17 @@ class ConversationController extends Controller
 
         $conversation->load([
             'website.tenant',
+            'channelConnection',
+            'contact',
             'lead',
             'assignedAgent',
-            'messages' => function ($query) {
-                $query
-                    ->with('user')
-                    ->orderBy('id');
-            },
+
+            'messages' =>
+                function ($query): void {
+                    $query
+                        ->with('user')
+                        ->orderBy('id');
+                },
         ]);
 
         return view(
@@ -89,55 +142,119 @@ class ConversationController extends Controller
             $conversation
         );
 
-        $user = $request->user();
+        $user =
+            $request->user();
 
-        $result = DB::transaction(function () use (
-            $conversation,
-            $user
-        ) {
-            $lockedConversation = Conversation::query()
-                ->lockForUpdate()
-                ->findOrFail($conversation->id);
+        $result =
+            DB::transaction(
+                function () use (
+                    $conversation,
+                    $user
+                ): array {
+                    $lockedConversation =
+                        Conversation::query()
+                            ->lockForUpdate()
+                            ->findOrFail(
+                                $conversation->id
+                            );
 
-            if (
-                $lockedConversation->assigned_agent_id &&
-                (int) $lockedConversation->assigned_agent_id !==
-                (int) $user->id
-            ) {
-                return [
-                    'error' => true,
-                    'status' => 409,
-                    'message' =>
-                        'Another agent has already taken this conversation.',
-                ];
-            }
+                    if (
+                        $lockedConversation->assigned_agent_id
+                        &&
+                        (int)
+                        $lockedConversation->assigned_agent_id
+                        !==
+                        (int)
+                        $user->id
+                    ) {
+                        return [
+                            'error' => true,
+                            'status' => 409,
 
-            $lockedConversation->update([
-                'mode' => 'live',
-                'assigned_agent_id' => $user->id,
-                'live_started_at' =>
-                    $lockedConversation->live_started_at ?: now(),
-                'live_ended_at' => null,
-            ]);
+                            'message' =>
+                                'Another agent has already taken this conversation.',
+                        ];
+                    }
 
-            $systemMessage = Message::create([
-                'conversation_id' => $lockedConversation->id,
-                'user_id' => $user->id,
-                'sender' => 'system',
-                'is_system' => true,
-                'message' => $user->name . ' joined the live chat.',
-            ]);
+                    $lockedConversation->update([
+                        'mode' => 'live',
 
-            return [
-                'error' => false,
-                'conversation' => $lockedConversation->fresh(),
-                'message' => $systemMessage,
-            ];
-        });
+                        'assigned_agent_id' =>
+                            $user->id,
+
+                        'assigned_user_id' =>
+                            $user->id,
+
+                        'live_started_at' =>
+                            $lockedConversation
+                                ->live_started_at
+                            ?: now(),
+
+                        'live_ended_at' =>
+                            null,
+                    ]);
+
+                    $systemMessage =
+                        Message::create([
+                            'conversation_id' =>
+                                $lockedConversation->id,
+
+                            'channel_connection_id' =>
+                                $lockedConversation
+                                    ->channel_connection_id,
+
+                            'user_id' =>
+                                $user->id,
+
+                            'sender_user_id' =>
+                                $user->id,
+
+                            'sender' =>
+                                'system',
+
+                            'sender_type' =>
+                                'system',
+
+                            'direction' =>
+                                'outbound',
+
+                            'message_type' =>
+                                'text',
+
+                            'status' =>
+                                'sent',
+
+                            'is_ai_generated' =>
+                                false,
+
+                            'is_system' =>
+                                true,
+
+                            'sent_at' =>
+                                now(),
+
+                            'message' =>
+                                $user->name
+                                . ' joined the live chat.',
+                        ]);
+
+                    return [
+                        'error' => false,
+
+                        'conversation' =>
+                            $lockedConversation
+                                ->fresh(),
+
+                        'message' =>
+                            $systemMessage,
+                    ];
+                }
+            );
 
         if ($result['error']) {
             return response()->json([
-                'message' => $result['message'],
+                'message' =>
+                    $result['message'],
             ], $result['status']);
         }
 
@@ -153,34 +270,47 @@ class ConversationController extends Controller
             )
         );
 
+        OmnichannelMessageChanged::dispatch(
+            $result['message'],
+            'created'
+        );
+
         return response()->json([
             'success' => true,
+
             'mode' => 'live',
+
             'assigned_agent' => [
-                'id' => $user->id,
-                'name' => $user->name,
+                'id' =>
+                    $user->id,
+
+                'name' =>
+                    $user->name,
             ],
         ]);
     }
 
     public function sendMessage(
         Request $request,
-        Conversation $conversation
+        Conversation $conversation,
+        OutboundMessageService $outboundMessageService
     ): JsonResponse {
         $this->authorizeConversationAccess(
             $request,
             $conversation
         );
 
-        $validated = $request->validate([
-            'message' => [
-                'required',
-                'string',
-                'max:5000',
-            ],
-        ]);
+        $validated =
+            $request->validate([
+                'message' => [
+                    'required',
+                    'string',
+                    'max:5000',
+                ],
+            ]);
 
-        $user = $request->user();
+        $user =
+            $request->user();
 
         $conversation->refresh();
 
@@ -192,8 +322,11 @@ class ConversationController extends Controller
         }
 
         if (
-            (int) $conversation->assigned_agent_id !==
-            (int) $user->id
+            (int)
+            $conversation->assigned_agent_id
+            !==
+            (int)
+            $user->id
         ) {
             return response()->json([
                 'message' =>
@@ -201,25 +334,39 @@ class ConversationController extends Controller
             ], 403);
         }
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'user_id' => $user->id,
-            'sender' => 'agent',
-            'is_system' => false,
-            'message' => trim($validated['message']),
-        ]);
+        $message =
+            $outboundMessageService
+                ->send(
+                    conversation:
+                        $conversation,
 
-        $conversation->touch();
+                    body:
+                        trim(
+                            $validated['message']
+                        ),
 
-        $message->loadMissing('user', 'conversation');
+                    senderType:
+                        'agent',
 
-        broadcast(
-            new ConversationMessageCreated($message)
-        );
+                    senderUserId:
+                        $user->id,
+
+                    isAiGenerated:
+                        false,
+
+                    metadata: [
+                        'source' =>
+                            'live_agent',
+                    ],
+                );
 
         return response()->json([
             'success' => true,
-            'message' => $this->formatMessage($message),
+
+            'message' =>
+                $this->formatMessage(
+                    $message
+                ),
         ]);
     }
 
@@ -232,14 +379,20 @@ class ConversationController extends Controller
             $conversation
         );
 
-        $user = $request->user();
+        $user =
+            $request->user();
 
         $conversation->refresh();
 
         if (
-            $conversation->assigned_agent_id &&
-            (int) $conversation->assigned_agent_id !==
-            (int) $user->id &&
+            $conversation->assigned_agent_id
+            &&
+            (int)
+            $conversation->assigned_agent_id
+            !==
+            (int)
+            $user->id
+            &&
             !$user->isSuperAdmin()
         ) {
             return response()->json([
@@ -248,30 +401,78 @@ class ConversationController extends Controller
             ], 403);
         }
 
-        $result = DB::transaction(function () use (
-            $conversation,
-            $user
-        ) {
-            $conversation->update([
-                'mode' => 'ai',
-                'assigned_agent_id' => null,
-                'live_ended_at' => now(),
-            ]);
+        $result =
+            DB::transaction(
+                function () use (
+                    $conversation,
+                    $user
+                ): array {
+                    $conversation->update([
+                        'mode' => 'ai',
 
-            $message = Message::create([
-                'conversation_id' => $conversation->id,
-                'user_id' => $user->id,
-                'sender' => 'system',
-                'is_system' => true,
-                'message' =>
-                    'Live chat ended. The AI assistant is active again.',
-            ]);
+                        'assigned_agent_id' =>
+                            null,
 
-            return [
-                'conversation' => $conversation->fresh(),
-                'message' => $message,
-            ];
-        });
+                        'assigned_user_id' =>
+                            null,
+
+                        'live_ended_at' =>
+                            now(),
+                    ]);
+
+                    $message =
+                        Message::create([
+                            'conversation_id' =>
+                                $conversation->id,
+
+                            'channel_connection_id' =>
+                                $conversation
+                                    ->channel_connection_id,
+
+                            'user_id' =>
+                                $user->id,
+
+                            'sender_user_id' =>
+                                $user->id,
+
+                            'sender' =>
+                                'system',
+
+                            'sender_type' =>
+                                'system',
+
+                            'direction' =>
+                                'outbound',
+
+                            'message_type' =>
+                                'text',
+
+                            'status' =>
+                                'sent',
+
+                            'is_ai_generated' =>
+                                false,
+
+                            'is_system' =>
+                                true,
+
+                            'sent_at' =>
+                                now(),
+
+                            'message' =>
+                                'Live chat ended. The AI assistant is active again.',
+                        ]);
+
+                    return [
+                        'conversation' =>
+                            $conversation
+                                ->fresh(),
+
+                        'message' =>
+                            $message,
+                    ];
+                }
+            );
 
         broadcast(
             new ConversationModeChanged(
@@ -285,6 +486,11 @@ class ConversationController extends Controller
             )
         );
 
+        OmnichannelMessageChanged::dispatch(
+            $result['message'],
+            'created'
+        );
+
         return response()->json([
             'success' => true,
             'mode' => 'ai',
@@ -295,36 +501,78 @@ class ConversationController extends Controller
         Request $request,
         Conversation $conversation
     ): void {
-        $user = $request->user();
+        $user =
+            $request->user();
 
         if ($user->isSuperAdmin()) {
             return;
         }
 
-        $conversation->loadMissing('website');
+        if (
+            $conversation->tenant_id
+            !== null
+        ) {
+            abort_unless(
+                (int)
+                $conversation->tenant_id
+                ===
+                (int)
+                $user->tenant_id,
+                403,
+                'Unauthorized conversation access.'
+            );
+
+            return;
+        }
+
+        $conversation->loadMissing(
+            'website'
+        );
 
         abort_unless(
-            $conversation->website &&
-            (int) $conversation->website->tenant_id ===
-            (int) $user->tenant_id,
+            $conversation->website
+            &&
+            (int)
+            $conversation->website->tenant_id
+            ===
+            (int)
+            $user->tenant_id,
             403,
             'Unauthorized conversation access.'
         );
     }
 
-    private function formatMessage(Message $message): array
-    {
-        $message->loadMissing('user');
+    private function formatMessage(
+        Message $message
+    ): array {
+        $message->loadMissing(
+            'user'
+        );
 
         return [
-            'id' => $message->id,
-            'conversation_id' => $message->conversation_id,
-            'sender' => $message->sender,
-            'message' => $message->message,
-            'is_system' => (bool) $message->is_system,
-            'agent_name' => $message->user?->name,
+            'id' =>
+                $message->id,
+
+            'conversation_id' =>
+                $message->conversation_id,
+
+            'sender' =>
+                $message->sender,
+
+            'message' =>
+                $message->message,
+
+            'is_system' =>
+                (bool)
+                $message->is_system,
+
+            'agent_name' =>
+                $message->user?->name,
+
             'created_at' =>
-                $message->created_at?->toISOString(),
+                $message
+                    ->created_at
+                    ?->toISOString(),
         ];
     }
 }
