@@ -159,8 +159,7 @@ class InboundMessageService
                 |--------------------------------------------------------------------------
                 */
 
-                $message =
-                    new Message();
+                $message = new Message();
 
                 $message->conversation_id =
                     $conversation->id;
@@ -168,11 +167,14 @@ class InboundMessageService
                 $message->channel_connection_id =
                     $connection->id;
 
-                /*
-                 * Use the normalized value.
-                 */
                 $message->external_message_id =
-                    $externalMessageId;
+                    $data->externalMessageId;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Omnichannel fields
+                |--------------------------------------------------------------------------
+                */
 
                 $message->direction =
                     'inbound';
@@ -201,6 +203,29 @@ class InboundMessageService
                     'received';
 
                 $message->is_ai_generated =
+                    false;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Legacy website-chat compatibility
+                |--------------------------------------------------------------------------
+                |
+                | The existing messages table predates the omnichannel schema.
+                | These fields are still required/consumed by the existing website chat
+                | and admin interface.
+                |
+                */
+
+                $message->sender =
+                    'user';
+
+                $message->role =
+                    'user';
+
+                $message->tokens_used =
+                    0;
+
+                $message->is_system =
                     false;
 
                 $message->save();

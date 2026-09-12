@@ -107,6 +107,29 @@ class OutboundMessageService
                 $message->message = $body;
                 $message->is_ai_generated = $isAiGenerated;
                 $message->status = 'pending';
+                /*
+                |--------------------------------------------------------------------------
+                | Legacy website-chat compatibility
+                |--------------------------------------------------------------------------
+                |
+                | Keep populating the original message columns while the existing
+                | website widget/admin UI still coexists with the omnichannel schema.
+                |
+                */
+
+                $message->sender =
+                    $isAiGenerated
+                        ? 'assistant'
+                        : 'agent';
+
+                $message->role =
+                    'assistant';
+
+                $message->tokens_used =
+                    0;
+
+                $message->is_system =
+                    false;
                 $message->provider_status = 'pending';
 
                 if ($senderUserId !== null) {
