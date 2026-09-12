@@ -18,7 +18,6 @@ use App\Services\Omnichannel\InboundMessageService;
 use App\Services\Omnichannel\OutboundMessageService;
 use App\Services\Omnichannel\WebsiteConversationResolver;
 use App\Services\SalesBrainService;
-use App\Support\Omnichannel\WebsiteIdentity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -171,16 +170,39 @@ class ChatController extends Controller
                     $conversation->id
                 )
                 ->where(
-                    'is_system',
-                    false
+                    function ($query): void {
+                        $query
+                            ->where(
+                                'is_system',
+                                false
+                            )
+                            ->orWhereNull(
+                                'is_system'
+                            );
+                    }
                 )
-                ->whereIn(
-                    'sender',
-                    [
-                        'visitor',
-                        'ai',
-                        'agent',
-                    ]
+                ->where(
+                    function ($query): void {
+                        $query
+                            ->whereIn(
+                                'sender',
+                                [
+                                    'visitor',
+                                    'user',
+                                    'ai',
+                                    'assistant',
+                                    'agent',
+                                ]
+                            )
+                            ->orWhereIn(
+                                'sender_type',
+                                [
+                                    'contact',
+                                    'ai',
+                                    'agent',
+                                ]
+                            );
+                    }
                 )
                 ->latest('id')
                 ->limit(10)
@@ -190,9 +212,23 @@ class ChatController extends Controller
                     function (
                         Message $message
                     ): array {
+                        $isVisitor =
+                            $message->direction === 'inbound'
+                            ||
+                            $message->sender_type === 'contact'
+                            ||
+                            in_array(
+                                $message->sender,
+                                [
+                                    'visitor',
+                                    'user',
+                                ],
+                                true
+                            );
+
                         return [
                             'role' =>
-                                $message->sender === 'visitor'
+                                $isVisitor
                                     ? 'user'
                                     : 'assistant',
 
@@ -210,28 +246,9 @@ class ChatController extends Controller
                     $website
                 );
 
-        $adapter =
-            $this->channelManager
-                ->forConnection(
-                    $connection
-                );
-
-        $inboundData =
-            $adapter->parseInbound(
-                $connection,
-                $request
-            );
-
-        if (!$inboundData) {
-            return response()->json([
-                'message' =>
-                    'The website message could not be normalized.',
-            ], 422);
-        }
-
         /*
         |--------------------------------------------------------------------------
-        | Resolve WebsiteAdapter
+        | Resolve WebsiteAdapter and normalize inbound widget request
         |--------------------------------------------------------------------------
         */
 
@@ -241,12 +258,6 @@ class ChatController extends Controller
                 ->forConnection(
                     $connection
                 );
-
-        /*
-        |--------------------------------------------------------------------------
-        | Normalize incoming widget request
-        |--------------------------------------------------------------------------
-        */
 
         $inbound =
             $adapter->parseInbound(
@@ -260,30 +271,6 @@ class ChatController extends Controller
                     'The website message could not be normalized.',
             ], 422);
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Check whether provider/client message already exists
-        |--------------------------------------------------------------------------
-        |
-        | InboundMessageService itself performs idempotency.
-        |
-        | We separately check here because the old website widget Reverb event
-        | should only be broadcast for genuinely new visitor messages.
-        |--------------------------------------------------------------------------
-        */
-
-        $alreadyExists =
-            Message::query()
-                ->where(
-                    'channel_connection_id',
-                    $connection->id
-                )
-                ->where(
-                    'external_message_id',
-                    $inbound->externalMessageId
-                )
-                ->exists();
 
         /*
         |--------------------------------------------------------------------------
@@ -307,21 +294,17 @@ class ChatController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Preserve existing website Reverb event
+        | Do not rebroadcast inbound visitor messages to the public widget channel
         |--------------------------------------------------------------------------
         |
-        | Existing widget/live-agent frontend already understands
-        | ConversationMessageCreated.
+        | The widget already renders the visitor's message locally. Broadcasting
+        | this inbound row through ConversationMessageCreated makes the widget
+        | receive its own message as though it were a reply.
+        |
+        | InboundMessageService still publishes OmnichannelMessageChanged to the
+        | tenant/admin inbox, so operators continue to receive inbound messages.
         |--------------------------------------------------------------------------
         */
-
-        if (!$alreadyExists) {
-            broadcast(
-                new ConversationMessageCreated(
-                    $visitorMessage
-                )
-            );
-        }
 
         $conversation->refresh();
 
@@ -1115,7 +1098,7 @@ class ChatController extends Controller
         ) {
             broadcast(
                 new ConversationMessageCreated(
-                    $systemMessage
+                    $result['message']
                 )
             );
 
@@ -1175,43 +1158,55 @@ class ChatController extends Controller
         Website $website,
         string $visitorId
     ): ?Conversation {
+        $visitorId =
+            trim(
+                $visitorId
+            );
+
         try {
             $connection =
                 $this
                     ->websiteConversationResolver
-                    ->connectionFor(
+                    ->resolveConnection(
                         $website
                     );
 
-            $externalThreadId =
-                WebsiteIdentity::externalThreadId(
-                    $website->id,
-                    $visitorId
-                );
-
             /*
-             * Prefer omnichannel lookup.
+             * WebsiteConversationResolver and WebsiteAdapter deliberately
+             * preserve the raw website visitor ID as external_thread_id for
+             * backwards compatibility with existing widget visitors.
              */
             $conversation =
                 Conversation::query()
+                    ->where(
+                        'tenant_id',
+                        $website->tenant_id
+                    )
                     ->where(
                         'channel_connection_id',
                         $connection->id
                     )
                     ->where(
                         'external_thread_id',
-                        $externalThreadId
+                        $visitorId
                     )
+                    ->orderByDesc('id')
                     ->first();
 
             if ($conversation) {
                 return $conversation;
             }
-        } catch (RuntimeException) {
-            /*
-             * During deployment/backfill, fall through
-             * and attempt the legacy lookup.
-             */
+        } catch (RuntimeException $exception) {
+            Log::warning(
+                'Website history omnichannel lookup fell back to legacy lookup.',
+                [
+                    'website_id' =>
+                        $website->id,
+
+                    'error' =>
+                        $exception->getMessage(),
+                ]
+            );
         }
 
         /*
