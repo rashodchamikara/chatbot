@@ -11,11 +11,13 @@ use App\Services\Knowledge\Extraction\ImageOcrExtractor;
 use App\Services\Knowledge\Extraction\PdfTextExtractor;
 use App\Services\Knowledge\Extraction\PlainTextExtractor;
 use App\Services\Knowledge\Extraction\SpreadsheetExtractor;
+
 use App\Services\Omnichannel\Adapters\WebsiteAdapter;
+use App\Services\Omnichannel\Adapters\WhatsAppAdapter;
 use App\Services\Omnichannel\ChannelManager;
+
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
-
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -64,24 +66,37 @@ class AppServiceProvider extends ServiceProvider
         | Omnichannel ChannelManager
         |--------------------------------------------------------------------------
         |
-        | Sprint 3 registers the native website adapter.
+        | Register every channel adapter here.
         |
-        | Sprint 4 will add WhatsApp without changing
-        | controllers or the common services.
+        | ChannelManager uses the adapter type() value
+        | to resolve the correct implementation.
+        |
+        | website  -> WebsiteAdapter
+        | whatsapp -> WhatsAppAdapter
         |
         */
 
         $this->app->singleton(
             ChannelManager::class,
-            function (
-                $app
-            ): ChannelManager {
+            function ($app): ChannelManager {
                 $manager =
                     new ChannelManager();
 
+                /*
+                 * Native website chat channel.
+                 */
                 $manager->register(
                     $app->make(
                         WebsiteAdapter::class
+                    )
+                );
+
+                /*
+                 * Meta WhatsApp Cloud API channel.
+                 */
+                $manager->register(
+                    $app->make(
+                        WhatsAppAdapter::class
                     )
                 );
 

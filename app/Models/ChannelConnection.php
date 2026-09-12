@@ -44,6 +44,10 @@ class ChannelConnection extends Model
         'last_health_check_at' => 'datetime',
     ];
 
+        protected $hidden = [
+        'credentials',
+    ];
+
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(

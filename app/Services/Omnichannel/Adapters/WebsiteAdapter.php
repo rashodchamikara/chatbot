@@ -24,122 +24,448 @@ class WebsiteAdapter implements ChannelAdapter
      * omnichannel inbound DTO.
      */
     public function parseInbound(
+    ChannelConnection $connection,
+    Request $request,
+): ?InboundMessageData {
+    $messages = $this->parseInboundPayload(
+        connection: $connection,
+        payload: $request->json()->all(),
+    );
+
+    return $messages[0] ?? null;
+}
+
+    /**
+     * Parse all supported messages in a Meta webhook.
+     *
+     * Sprint 2.8.4.2 handles inbound TEXT only.
+     *
+     * @return array<int, InboundMessageData>
+     */
+    public function parseInboundPayload(
         ChannelConnection $connection,
-        Request $request
-    ): ?InboundMessageData {
+        array $payload,
+    ): array {
         if (
             strtolower(
-                trim(
-                    (string) $connection->type
-                )
-            ) !== ChannelType::Website->value
+                trim((string) $connection->type)
+            ) !== 'whatsapp'
         ) {
-            return null;
+            return [];
         }
-
-        if (!$connection->website_id) {
-            return null;
-        }
-
-        $visitorId = trim(
-            (string) $request->input(
-                'visitor_id',
-                ''
-            )
-        );
-
-        $text = trim(
-            (string) $request->input(
-                'message',
-                ''
-            )
-        );
 
         if (
-            $visitorId === ''
-            || $text === ''
+            strtolower(
+                trim((string) $connection->provider)
+            ) !== 'meta'
         ) {
+            return [];
+        }
+
+        if (
+            ($payload['object'] ?? null)
+            !== 'whatsapp_business_account'
+        ) {
+            return [];
+        }
+
+        $connectionWabaId =
+            trim(
+                (string)
+                $connection->external_account_id
+            );
+
+        $connectionPhoneNumberId =
+            trim(
+                (string)
+                $connection->external_sender_id
+            );
+
+        if (
+            $connectionWabaId === ''
+            ||
+            $connectionPhoneNumberId === ''
+        ) {
+            return [];
+        }
+
+        $results = [];
+
+        $entries = $payload['entry'] ?? [];
+
+        if (!is_array($entries)) {
+            return [];
+        }
+
+        foreach ($entries as $entry) {
+
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            /*
+            * Meta entry.id is the WABA ID.
+            */
+            $wabaId = trim(
+                (string) (
+                    $entry['id']
+                    ?? ''
+                )
+            );
+
+            if (
+                $wabaId === ''
+                ||
+                $wabaId !== $connectionWabaId
+            ) {
+                continue;
+            }
+
+            $changes =
+                $entry['changes']
+                ?? [];
+
+            if (!is_array($changes)) {
+                continue;
+            }
+
+            foreach ($changes as $change) {
+
+                if (!is_array($change)) {
+                    continue;
+                }
+
+                /*
+                * Incoming WhatsApp messages use
+                * the "messages" webhook field.
+                */
+                if (
+                    ($change['field'] ?? null)
+                    !== 'messages'
+                ) {
+                    continue;
+                }
+
+                $value =
+                    $change['value']
+                    ?? null;
+
+                if (!is_array($value)) {
+                    continue;
+                }
+
+                if (
+                    isset(
+                        $value['messaging_product']
+                    )
+                    &&
+                    $value['messaging_product']
+                    !== 'whatsapp'
+                ) {
+                    continue;
+                }
+
+                $providerMetadata =
+                    $value['metadata']
+                    ?? [];
+
+                if (
+                    !is_array(
+                        $providerMetadata
+                    )
+                ) {
+                    $providerMetadata = [];
+                }
+
+                $phoneNumberId =
+                    trim(
+                        (string) (
+                            $providerMetadata[
+                                'phone_number_id'
+                            ]
+                            ?? ''
+                        )
+                    );
+
+                /*
+                * Critical multi-tenant security check.
+                */
+                if (
+                    $phoneNumberId === ''
+                    ||
+                    $phoneNumberId !==
+                        $connectionPhoneNumberId
+                ) {
+                    continue;
+                }
+
+                $contacts =
+                    $value['contacts']
+                    ?? [];
+
+                if (!is_array($contacts)) {
+                    $contacts = [];
+                }
+
+                $messages =
+                    $value['messages']
+                    ?? [];
+
+                /*
+                * Delivery/read events contain statuses
+                * instead of messages.
+                *
+                * We handle those in a later sprint.
+                */
+                if (!is_array($messages)) {
+                    continue;
+                }
+
+                foreach ($messages as $message) {
+
+                    if (!is_array($message)) {
+                        continue;
+                    }
+
+                    $type =
+                        strtolower(
+                            trim(
+                                (string) (
+                                    $message['type']
+                                    ?? ''
+                                )
+                            )
+                        );
+
+                    /*
+                    * Text only for this sprint.
+                    */
+                    if ($type !== 'text') {
+                        continue;
+                    }
+
+                    $messageId =
+                        trim(
+                            (string) (
+                                $message['id']
+                                ?? ''
+                            )
+                        );
+
+                    $sender =
+                        trim(
+                            (string) (
+                                $message['from']
+                                ?? ''
+                            )
+                        );
+
+                    $body =
+                        trim(
+                            (string) (
+                                $message[
+                                    'text'
+                                ][
+                                    'body'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    if (
+                        $messageId === ''
+                        ||
+                        $sender === ''
+                        ||
+                        $body === ''
+                    ) {
+                        continue;
+                    }
+
+                    $contact =
+                        $this->findWhatsAppContact(
+                            contacts: $contacts,
+                            sender: $sender,
+                        );
+
+                    $waId =
+                        trim(
+                            (string) (
+                                $contact['wa_id']
+                                ?? $sender
+                            )
+                        );
+
+                    if ($waId === '') {
+                        $waId = $sender;
+                    }
+
+                    $contactName =
+                        $this->extractWhatsAppContactName(
+                            $contact
+                        );
+
+                    $replyToExternalId =
+                        trim(
+                            (string) (
+                                $message[
+                                    'context'
+                                ][
+                                    'id'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    /*
+                    * WhatsApp 1:1 conversations don't
+                    * expose an independent thread ID.
+                    *
+                    * wa_id is stable for the contact and
+                    * business relationship, so we use it
+                    * as our external thread ID.
+                    */
+                    $results[] =
+                        new InboundMessageData(
+                            tenantId:
+                                (int)
+                                $connection->tenant_id,
+
+                            channelConnectionId:
+                                (int)
+                                $connection->id,
+
+                            externalContactId:
+                                $waId,
+
+                            externalMessageId:
+                                $messageId,
+
+                            externalThreadId:
+                                $waId,
+
+                            contactName:
+                                $contactName,
+
+                            contactEmail:
+                                null,
+
+                            contactPhone:
+                                $sender,
+
+                            messageType:
+                                'text',
+
+                            text:
+                                $body,
+
+                            attachments:
+                                [],
+
+                            metadata: [
+                                'channel' =>
+                                    'whatsapp',
+
+                                'provider' =>
+                                    'meta',
+
+                                'waba_id' =>
+                                    $wabaId,
+
+                                'phone_number_id' =>
+                                    $phoneNumberId,
+
+                                'display_phone_number' =>
+                                    $providerMetadata[
+                                        'display_phone_number'
+                                    ] ?? null,
+
+                                'sender_wa_id' =>
+                                    $waId,
+
+                                'whatsapp_message_id' =>
+                                    $messageId,
+
+                                'timestamp' =>
+                                    $message[
+                                        'timestamp'
+                                    ] ?? null,
+
+                                'reply_to_external_message_id' =>
+                                    $replyToExternalId !== ''
+                                        ? $replyToExternalId
+                                        : null,
+                            ],
+                        );
+                }
+            }
+        }
+
+        return $results;
+    }
+
+    private function findWhatsAppContact(
+        array $contacts,
+        string $sender,
+    ): array {
+        foreach ($contacts as $contact) {
+
+            if (!is_array($contact)) {
+                continue;
+            }
+
+            $waId =
+                trim(
+                    (string) (
+                        $contact['wa_id']
+                        ?? ''
+                    )
+                );
+
+            if (
+                $waId !== ''
+                &&
+                $waId === $sender
+            ) {
+                return $contact;
+            }
+        }
+
+        if (
+            isset($contacts[0])
+            &&
+            is_array(
+                $contacts[0]
+            )
+        ) {
+            return $contacts[0];
+        }
+
+        return [];
+    }
+
+    private function extractWhatsAppContactName(
+        array $contact
+    ): ?string {
+        $profile =
+            $contact['profile']
+            ?? null;
+
+        if (!is_array($profile)) {
             return null;
         }
 
-        /*
-         * If the widget provides a client message ID,
-         * convert it into a channel-scoped provider ID.
-         *
-         * This allows InboundMessageService to prevent
-         * accidental duplicate messages.
-         */
-        $clientMessageId = trim(
-            (string) $request->input(
-                'client_message_id',
-                ''
-            )
-        );
+        $name =
+            trim(
+                (string) (
+                    $profile['name']
+                    ?? ''
+                )
+            );
 
-        $externalMessageId = null;
-
-        if ($clientMessageId !== '') {
-            $externalMessageId =
-                'website:'
-                . $connection->id
-                . ':'
-                . $clientMessageId;
-        }
-
-        return new InboundMessageData(
-            tenantId:
-                (int) $connection->tenant_id,
-
-            channelConnectionId:
-                (int) $connection->id,
-
-            externalContactId:
-                $visitorId,
-
-            externalThreadId:
-                $visitorId,
-
-            externalMessageId:
-                $externalMessageId,
-
-            contactName:
-                null,
-
-            contactEmail:
-                null,
-
-            contactPhone:
-                null,
-
-            messageType:
-                'text',
-
-            text:
-                $text,
-
-            attachments:
-                [],
-
-            metadata: [
-                'channel' =>
-                    ChannelType::Website->value,
-
-                'provider' =>
-                    $connection->provider
-                    ?: 'native',
-
-                'website_id' =>
-                    (int) $connection->website_id,
-
-                'visitor_id' =>
-                    $visitorId,
-
-                'client_message_id' =>
-                    $clientMessageId !== ''
-                        ? $clientMessageId
-                        : null,
-            ],
-        );
+        return $name !== ''
+            ? $name
+            : null;
     }
 
     /**
