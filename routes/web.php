@@ -197,3 +197,5 @@ Route::middleware('auth')
     ->post('/websites', [WebsiteController::class, 'store']);
 
 require __DIR__ . '/auth.php';
+
+require __DIR__ . '/admin_omnichannel.php';
