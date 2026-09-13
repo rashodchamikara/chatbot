@@ -632,6 +632,31 @@ class InboundMessageService
                 $connection->website_id;
         }
 
+        /*
+         * Legacy compatibility:
+         *
+         * The existing conversations table still requires visitor_id.
+         * For website traffic this remains the normal widget visitor ID.
+         * For external channels such as WhatsApp, use the provider's
+         * stable thread/contact identifier so non-website conversations
+         * can still satisfy the legacy NOT NULL column safely.
+         */
+        $legacyVisitorId = trim(
+            (string) (
+                $data->externalThreadId
+                ?: $data->externalContactId
+            )
+        );
+
+        if ($legacyVisitorId === '') {
+            $legacyVisitorId =
+                'contact-'
+                . $contact->id;
+        }
+
+        $conversation->visitor_id =
+            $legacyVisitorId;
+
         $conversation->external_thread_id =
             $data->externalThreadId;
 
