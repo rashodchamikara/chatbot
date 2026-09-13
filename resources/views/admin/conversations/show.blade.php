@@ -66,6 +66,7 @@
             <div
                 id="conversation-page"
                 data-conversation-id="{{ $conversation->id }}"
+                data-tenant-id="{{ $conversation->tenant_id }}"
                 data-mode="{{ $conversation->mode }}"
                 data-assigned-agent-id="{{ $conversation->assigned_agent_id }}"
                 data-current-user-id="{{ auth()->id() }}"
@@ -346,6 +347,8 @@
         }
 
         const currentUserId = Number(page.dataset.currentUserId);
+        const conversationId = Number(page.dataset.conversationId);
+        const tenantId = Number(page.dataset.tenantId);
         const realtimeToken = page.dataset.realtimeToken;
 
         let mode = page.dataset.mode;
@@ -412,6 +415,44 @@
                 hour: '2-digit',
                 minute: '2-digit'
             });
+        }
+
+        function normalizeOmnichannelMessage(message) {
+            if (!message) {
+                return null;
+            }
+
+            let sender = message.sender || null;
+
+            if (!sender) {
+                if (
+                    message.direction === 'inbound'
+                    || message.sender_type === 'contact'
+                ) {
+                    sender = 'visitor';
+                } else if (
+                    message.sender_type === 'ai'
+                    || message.is_ai_generated === true
+                ) {
+                    sender = 'ai';
+                } else if (message.sender_type === 'system') {
+                    sender = 'system';
+                } else {
+                    sender = 'agent';
+                }
+            }
+
+            return {
+                ...message,
+                sender,
+                is_system:
+                    message.is_system !== undefined
+                        ? Boolean(message.is_system)
+                        : sender === 'system',
+                agent_name:
+                    message.agent_name
+                    || (sender === 'agent' ? 'Agent' : null)
+            };
         }
 
         function appendMessage(message) {
@@ -666,7 +707,7 @@
             }
         });
 
-        if (!window.Echo || !realtimeToken) {
+        if (!window.Echo) {
             if (realtimeStatus) {
                 realtimeStatus.innerHTML =
                     '<span class="h-2 w-2 rounded-full bg-red-500"></span> Real-time connection unavailable';
@@ -678,34 +719,100 @@
             return;
         }
 
-        const channel = window.Echo.channel(
-            `conversation.${realtimeToken}`
-        );
+        let hasRealtimeSubscription = false;
 
-        channel.listen(
-            '.conversation.message.created',
-            function (event) {
-                appendMessage(event);
-            }
-        );
+        /*
+         * Legacy/public conversation channel.
+         *
+         * Keep this subscription because it is still used by:
+         * - ConversationMessageCreated for outbound website messages
+         * - ConversationModeChanged for live/AI mode changes
+         */
+        if (realtimeToken) {
+            const legacyChannel = window.Echo.channel(
+                `conversation.${realtimeToken}`
+            );
 
-        channel.listen(
-            '.conversation.mode.changed',
-            function (event) {
-                updateModeUi(event.mode, event);
-
-                if (event.assigned_agent_name && assignedAgentName) {
-                    assignedAgentName.textContent =
-                        event.assigned_agent_name;
+            legacyChannel.listen(
+                '.conversation.message.created',
+                function (event) {
+                    appendMessage(event);
                 }
-            }
-        );
+            );
+
+            legacyChannel.listen(
+                '.conversation.mode.changed',
+                function (event) {
+                    updateModeUi(event.mode, event);
+
+                    if (event.assigned_agent_name && assignedAgentName) {
+                        assignedAgentName.textContent =
+                            event.assigned_agent_name;
+                    }
+                }
+            );
+
+            hasRealtimeSubscription = true;
+        }
+
+        /*
+         * Omnichannel/private conversation channel.
+         *
+         * Inbound visitor messages are intentionally NOT broadcast through
+         * ConversationMessageCreated because the website widget would receive
+         * its own message as a reply. InboundMessageService publishes them as
+         * OmnichannelMessageChanged instead, so the agent page must subscribe
+         * to this private tenant conversation channel.
+         */
+        if (tenantId && conversationId) {
+            const omnichannel = window.Echo.private(
+                `tenant.${tenantId}.conversation.${conversationId}`
+            );
+
+            omnichannel.listen(
+                '.omnichannel.message.changed',
+                function (event) {
+                    if (
+                        !event
+                        || !event.message
+                        || Number(event.message.conversation_id) !== conversationId
+                    ) {
+                        return;
+                    }
+
+                    /*
+                     * Only a newly-created message needs to be appended.
+                     * status_updated events refer to a message that is already
+                     * rendered. messageExists() also protects against duplicate
+                     * delivery from the legacy public channel/AJAX response.
+                     */
+                    if (event.change_type !== 'created') {
+                        return;
+                    }
+
+                    appendMessage(
+                        normalizeOmnichannelMessage(
+                            event.message
+                        )
+                    );
+                }
+            );
+
+            hasRealtimeSubscription = true;
+        }
 
         if (realtimeStatus) {
-            realtimeStatus.innerHTML =
-                '<span class="h-2 w-2 rounded-full bg-emerald-500"></span> Real-time updates active';
-            realtimeStatus.className =
-                'mt-1 inline-flex items-center gap-2 text-xs text-emerald-600';
+            if (hasRealtimeSubscription) {
+                realtimeStatus.innerHTML =
+                    '<span class="h-2 w-2 rounded-full bg-emerald-500"></span> Real-time updates active';
+                realtimeStatus.className =
+                    'mt-1 inline-flex items-center gap-2 text-xs text-emerald-600';
+            } else {
+                realtimeStatus.innerHTML =
+                    '<span class="h-2 w-2 rounded-full bg-red-500"></span> Real-time channel unavailable';
+                realtimeStatus.className =
+                    'mt-1 inline-flex items-center gap-2 text-xs text-red-600';
+            }
         }
 
         scrollToBottom();
