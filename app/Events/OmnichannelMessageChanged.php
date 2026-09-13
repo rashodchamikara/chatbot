@@ -29,9 +29,11 @@ class OmnichannelMessageChanged implements ShouldBroadcastNow
         |--------------------------------------------------------------------------
         */
 
-        $this->message->loadMissing(
-            'conversation'
-        );
+        $this->message->loadMissing([
+            'conversation',
+            'user',
+            'senderUser',
+        ]);
 
         if (!$this->message->conversation) {
             throw new RuntimeException(
@@ -122,8 +124,27 @@ class OmnichannelMessageChanged implements ShouldBroadcastNow
                 'direction' =>
                     $this->message->direction,
 
+                /*
+                 * Keep the legacy sender fields in the realtime payload while
+                 * the existing admin chat renderer and the omnichannel schema
+                 * coexist. These are additive and do not change the canonical
+                 * omnichannel direction/sender_type fields.
+                 */
+                'sender' =>
+                    $this->message->sender,
+
                 'sender_type' =>
                     $this->message->sender_type,
+
+                'sender_user_id' =>
+                    $this->message->sender_user_id,
+
+                'is_system' =>
+                    (bool) $this->message->is_system,
+
+                'agent_name' =>
+                    $this->message->user?->name
+                    ?? $this->message->senderUser?->name,
 
                 'message_type' =>
                     $this->message->message_type,
