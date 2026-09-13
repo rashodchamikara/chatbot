@@ -12,6 +12,7 @@ class AiAgent extends Model
         'tenant_id',
         'name',
         'status',
+        'is_default',
         'instructions',
         'default_language',
         'model_settings',
@@ -22,6 +23,7 @@ class AiAgent extends Model
     protected function casts(): array
     {
         return [
+            'is_default' => 'boolean',
             'model_settings' => 'array',
             'handover_settings' => 'array',
             'business_hours' => 'array',
@@ -30,29 +32,36 @@ class AiAgent extends Model
 
     public function tenant(): BelongsTo
     {
-        return $this->belongsTo(
-            Tenant::class
-        );
+        return $this->belongsTo(Tenant::class);
     }
 
     public function channelConnections(): HasMany
     {
-        return $this->hasMany(
-            ChannelConnection::class
-        );
+        return $this->hasMany(ChannelConnection::class);
     }
 
     public function websites(): HasMany
     {
-        return $this->hasMany(
-            Website::class
-        );
+        return $this->hasMany(Website::class);
     }
 
     public function conversations(): HasMany
     {
-        return $this->hasMany(
-            Conversation::class
-        );
+        return $this->hasMany(Conversation::class);
+    }
+
+    public function knowledgePages(): HasMany
+    {
+        return $this->hasMany(KnowledgePage::class);
+    }
+
+    public function knowledgeSources(): HasMany
+    {
+        return $this->hasMany(KnowledgeSource::class);
+    }
+
+    public function knowledgeChunks(): HasMany
+    {
+        return $this->hasMany(KnowledgeChunk::class);
     }
 }

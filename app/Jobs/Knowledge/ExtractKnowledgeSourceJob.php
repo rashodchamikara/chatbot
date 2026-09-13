@@ -201,13 +201,34 @@ class ExtractKnowledgeSourceJob implements ShouldQueue
                 (int) ($source->processing_version ?? 1)
             );
 
-            $extractedStoragePath = sprintf(
-                'knowledge/tenants/%d/websites/%d/sources/%s/extracted-v%d.json.gz',
-                (int) $source->tenant_id,
-                (int) $source->website_id,
-                (string) $source->uuid,
-                $processingVersion
-            );
+            /*
+             * Website sources keep the existing namespace. Standalone knowledge
+             * (for WhatsApp-only/future channel-only customers) is stored under
+             * its AI agent instead of the invalid websites/0 namespace.
+             */
+            if ($source->website_id) {
+                $extractedStoragePath = sprintf(
+                    'knowledge/tenants/%d/websites/%d/sources/%s/extracted-v%d.json.gz',
+                    (int) $source->tenant_id,
+                    (int) $source->website_id,
+                    (string) $source->uuid,
+                    $processingVersion
+                );
+            } else {
+                if (!$source->ai_agent_id) {
+                    throw new RuntimeException(
+                        'Standalone knowledge source does not have an ai_agent_id.'
+                    );
+                }
+
+                $extractedStoragePath = sprintf(
+                    'knowledge/tenants/%d/agents/%d/sources/%s/extracted-v%d.json.gz',
+                    (int) $source->tenant_id,
+                    (int) $source->ai_agent_id,
+                    (string) $source->uuid,
+                    $processingVersion
+                );
+            }
 
             $json = json_encode(
                 [
@@ -312,6 +333,7 @@ class ExtractKnowledgeSourceJob implements ShouldQueue
                 [
                     'knowledge_source_id' => $source->id,
                     'website_id' => $source->website_id,
+                    'ai_agent_id' => $source->ai_agent_id,
                     'storage_disk' => $source->storage_disk,
                     'storage_path' => $source->storage_path,
                     'exception_class' => get_class($exception),

@@ -7,7 +7,7 @@
                 </h1>
 
                 <p class="mt-1 text-sm text-slate-500">
-                    Monitor AI conversations, live-agent requests, and qualified sales activity.
+                    Monitor AI and human conversations across WhatsApp, websites, and future channels.
                 </p>
             </div>
 
@@ -38,7 +38,7 @@
                 <form
                     method="GET"
                     action="{{ route('admin.conversations.index') }}"
-                    class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5"
+                    class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6"
                 >
                     <div>
                         <label for="status" class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -70,6 +70,18 @@
                             <option value="ai" @selected(request('mode') === 'ai')>AI</option>
                             <option value="live_waiting" @selected(request('mode') === 'live_waiting')>Waiting for agent</option>
                             <option value="live" @selected(request('mode') === 'live')>Live agent</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="channel_type" class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Channel
+                        </label>
+
+                        <select id="channel_type" name="channel_type" class="h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="">All channels</option>
+                            <option value="whatsapp" @selected(request('channel_type') === 'whatsapp')>WhatsApp</option>
+                            <option value="website" @selected(request('channel_type') === 'website')>Website</option>
                         </select>
                     </div>
 
@@ -118,8 +130,8 @@
                     <table class="w-full table-auto border-collapse">
                         <thead class="bg-slate-50">
                             <tr class="border-b border-slate-200">
-                                <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Visitor</th>
-                                <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Website</th>
+                                <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</th>
+                                <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Channel</th>
                                 <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Lead</th>
                                 <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Mode</th>
                                 <th class="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
@@ -158,12 +170,12 @@
                                     <td class="px-5 py-4 align-middle">
                                         <div class="flex items-center gap-3">
                                             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
-                                                {{ strtoupper(substr($conversation->visitor_id, 0, 2)) }}
+                                                {{ strtoupper(substr($conversation->contact?->name ?: $conversation->contact?->phone ?: $conversation->visitor_id ?: 'CU', 0, 2)) }}
                                             </div>
 
                                             <div class="min-w-0">
                                                 <p class="max-w-48 truncate text-sm font-semibold text-slate-900">
-                                                    {{ $conversation->visitor_id }}
+                                                    {{ $conversation->contact?->name ?: $conversation->contact?->phone ?: $conversation->visitor_id ?: 'Customer' }}
                                                 </p>
 
                                                 <p class="mt-1 text-xs text-slate-500">
@@ -174,7 +186,7 @@
                                     </td>
 
                                     <td class="px-5 py-4 align-middle text-sm text-slate-700">
-                                        {{ $conversation->website->name ?? '—' }}
+                                        {{ ucfirst($conversation->channelConnection?->type ?: 'website') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}
                                     </td>
 
                                     <td class="px-5 py-4 align-middle">
@@ -201,7 +213,7 @@
 
                                     @if(auth()->user()->isSuperAdmin())
                                         <td class="px-5 py-4 align-middle text-sm text-slate-600">
-                                            {{ $conversation->website?->tenant?->name ?? '—' }}
+                                            {{ $conversation->channelConnection?->tenant?->name ?? $conversation->website?->tenant?->name ?? '—' }}
                                         </td>
                                     @endif
 
@@ -232,7 +244,7 @@
                                         </div>
 
                                         <h3 class="mt-4 text-sm font-semibold text-slate-900">No conversations found</h3>
-                                        <p class="mt-1 text-sm text-slate-500">Try changing the filters or wait for a new visitor conversation.</p>
+                                        <p class="mt-1 text-sm text-slate-500">Try changing the filters or wait for a new customer conversation.</p>
                                     </td>
                                 </tr>
                             @endforelse
@@ -259,12 +271,12 @@
                         <article class="p-5">
                             <div class="flex items-start gap-3">
                                 <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
-                                    {{ strtoupper(substr($conversation->visitor_id, 0, 2)) }}
+                                    {{ strtoupper(substr($conversation->contact?->name ?: $conversation->contact?->phone ?: $conversation->visitor_id ?: 'CU', 0, 2)) }}
                                 </div>
 
                                 <div class="min-w-0 flex-1">
-                                    <p class="truncate font-semibold text-slate-900">{{ $conversation->visitor_id }}</p>
-                                    <p class="mt-1 truncate text-sm text-slate-500">{{ $conversation->website->name ?? 'Unknown website' }}</p>
+                                    <p class="truncate font-semibold text-slate-900">{{ $conversation->contact?->name ?: $conversation->contact?->phone ?: $conversation->visitor_id ?: 'Customer' }}</p>
+                                    <p class="mt-1 truncate text-sm text-slate-500">{{ ucfirst($conversation->channelConnection?->type ?: 'website') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}</p>
                                 </div>
 
                                 <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ $modeClasses }}">

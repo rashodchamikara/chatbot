@@ -3,11 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Website;
 use App\Models\KnowledgePage;
-use App\Models\KnowledgeChunk;
-use App\Services\TextChunkerService;
-use App\Services\EmbeddingService;
+use App\Models\Website;
+use App\Services\Knowledge\ManualKnowledgeIndexer;
 use Illuminate\Http\Request;
 
 class KnowledgePageController extends Controller
@@ -21,8 +19,7 @@ class KnowledgePageController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->search;
-
-            $query->where(function ($q) use ($search) {
+            $query->where(function ($q) use ($search): void {
                 $q->where('title', 'like', "%{$search}%")
                     ->orWhere('url', 'like', "%{$search}%")
                     ->orWhere('content', 'like', "%{$search}%");
@@ -38,23 +35,11 @@ class KnowledgePageController extends Controller
         }
 
         if ($request->filled('indexed')) {
-            if ($request->indexed === 'yes') {
-                $query->where('is_indexed', true);
-            }
-
-            if ($request->indexed === 'no') {
-                $query->where('is_indexed', false);
-            }
+            $query->where('is_indexed', $request->indexed === 'yes');
         }
 
         if ($request->filled('active')) {
-            if ($request->active === 'yes') {
-                $query->where('is_active', true);
-            }
-
-            if ($request->active === 'no') {
-                $query->where('is_active', false);
-            }
+            $query->where('is_active', $request->active === 'yes');
         }
 
         $pages = $query
@@ -72,8 +57,11 @@ class KnowledgePageController extends Controller
         return view('admin.knowledge.create', compact('website'));
     }
 
-    public function store(Request $request, Website $website)
-    {
+    public function store(
+        Request $request,
+        Website $website,
+        ManualKnowledgeIndexer $indexer,
+    ) {
         $this->authorizeWebsiteAccess($website);
 
         $validated = $request->validate([
@@ -84,9 +72,12 @@ class KnowledgePageController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        $url = $validated['url'] ?: 'manual://' . str()->slug($validated['title']) . '-' . time();
+        $url = $validated['url']
+            ?: 'manual://' . str()->slug($validated['title']) . '-' . time();
 
-        $page = KnowledgePage::create([
+        $page = KnowledgePage::query()->create([
+            'tenant_id' => $website->tenant_id,
+            'ai_agent_id' => $website->ai_agent_id,
             'website_id' => $website->id,
             'url' => $url,
             'title' => $validated['title'],
@@ -98,9 +89,18 @@ class KnowledgePageController extends Controller
             'is_active' => $request->boolean('is_active', true),
         ]);
 
+        if ($website->ai_agent_id) {
+            $indexer->index($page);
+        }
+
         return redirect()
             ->route('admin.knowledge.show', $page)
-            ->with('success', 'Knowledge page created. Please index it before the AI can use it.');
+            ->with(
+                'success',
+                $website->ai_agent_id
+                    ? 'Knowledge page created and indexed successfully.'
+                    : 'Knowledge page created. The website must be linked to an AI agent before indexing.'
+            );
     }
 
     public function show(KnowledgePage $knowledgePage)
@@ -109,9 +109,8 @@ class KnowledgePageController extends Controller
 
         $knowledgePage->load([
             'website.tenant',
-            'chunks' => function ($query) {
-                $query->orderBy('chunk_index');
-            },
+            'aiAgent',
+            'chunks' => fn ($query) => $query->orderBy('chunk_index'),
         ]);
 
         return view('admin.knowledge.show', compact('knowledgePage'));
@@ -146,12 +145,20 @@ class KnowledgePageController extends Controller
             'content' => $validated['content'],
             'content_hash' => $newHash,
             'is_active' => $request->boolean('is_active'),
-            'is_indexed' => $oldHash === $newHash ? $knowledgePage->is_indexed : false,
-            'indexed_at' => $oldHash === $newHash ? $knowledgePage->indexed_at : null,
+            'is_indexed' => $oldHash === $newHash
+                ? $knowledgePage->is_indexed
+                : false,
+            'indexed_at' => $oldHash === $newHash
+                ? $knowledgePage->indexed_at
+                : null,
         ]);
 
         if ($oldHash !== $newHash) {
             $knowledgePage->chunks()->delete();
+        } else {
+            $knowledgePage->chunks()->update([
+                'is_active' => $knowledgePage->is_active,
+            ]);
         }
 
         return redirect()
@@ -164,48 +171,26 @@ class KnowledgePageController extends Controller
         $this->authorizeKnowledgePageAccess($knowledgePage);
 
         $website = $knowledgePage->website;
-
+        $knowledgePage->chunks()->delete();
         $knowledgePage->delete();
 
+        if ($website) {
+            return redirect()
+                ->route('admin.websites.knowledge.index', $website)
+                ->with('success', 'Knowledge page deleted successfully.');
+        }
+
         return redirect()
-            ->route('admin.websites.knowledge.index', $website)
+            ->route('admin.knowledge-hub.index')
             ->with('success', 'Knowledge page deleted successfully.');
     }
 
     public function indexPage(
         KnowledgePage $knowledgePage,
-        TextChunkerService $chunker,
-        EmbeddingService $embeddingService
+        ManualKnowledgeIndexer $indexer,
     ) {
         $this->authorizeKnowledgePageAccess($knowledgePage);
-
-        if (!$knowledgePage->content || strlen($knowledgePage->content) < 50) {
-            return redirect()
-                ->back()
-                ->with('error', 'This page does not have enough content to index.');
-        }
-
-        $knowledgePage->chunks()->delete();
-
-        $chunks = $chunker->chunk($knowledgePage->content);
-
-        foreach ($chunks as $index => $chunkText) {
-            $embedding = $embeddingService->embed($chunkText);
-
-            KnowledgeChunk::create([
-                'knowledge_page_id' => $knowledgePage->id,
-                'website_id' => $knowledgePage->website_id,
-                'chunk_text' => $chunkText,
-                'embedding' => $embedding,
-                'chunk_index' => $index,
-            ]);
-        }
-
-        $knowledgePage->update([
-            'is_indexed' => true,
-            'indexed_at' => now(),
-            'content_hash' => hash('sha256', $knowledgePage->content),
-        ]);
+        $indexer->index($knowledgePage);
 
         return redirect()
             ->back()
@@ -219,6 +204,10 @@ class KnowledgePageController extends Controller
         $knowledgePage->is_active = !$knowledgePage->is_active;
         $knowledgePage->save();
 
+        $knowledgePage->chunks()->update([
+            'is_active' => $knowledgePage->is_active && $knowledgePage->is_indexed,
+        ]);
+
         return redirect()
             ->back()
             ->with('success', 'Knowledge page status updated successfully.');
@@ -228,7 +217,10 @@ class KnowledgePageController extends Controller
     {
         $this->authorizeWebsiteAccess($website);
 
-        $website->knowledgePages()->delete();
+        foreach ($website->knowledgePages()->get() as $page) {
+            $page->chunks()->delete();
+            $page->delete();
+        }
 
         return redirect()
             ->route('admin.websites.show', $website)
@@ -243,13 +235,24 @@ class KnowledgePageController extends Controller
             return;
         }
 
-        if ($website->tenant_id !== $user->tenant_id) {
+        if ((int) $website->tenant_id !== (int) $user->tenant_id) {
             abort(403, 'Unauthorized website access.');
         }
     }
 
     private function authorizeKnowledgePageAccess(KnowledgePage $knowledgePage): void
     {
-        $this->authorizeWebsiteAccess($knowledgePage->website);
+        if ($knowledgePage->website) {
+            $this->authorizeWebsiteAccess($knowledgePage->website);
+            return;
+        }
+
+        $user = auth()->user();
+
+        if (!$user->isSuperAdmin()
+            && (int) $knowledgePage->tenant_id !== (int) $user->tenant_id
+        ) {
+            abort(403, 'Unauthorized knowledge access.');
+        }
     }
 }

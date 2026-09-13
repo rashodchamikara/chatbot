@@ -82,6 +82,12 @@ class ChunkKnowledgeSourceJob implements ShouldQueue
                      * Uploaded documents do not use
                      * knowledge_page_id.
                      */
+                    'tenant_id' =>
+                        $source->tenant_id,
+
+                    'ai_agent_id' =>
+                        $source->ai_agent_id,
+
                     'knowledge_page_id' => null,
 
                     'knowledge_source_id' =>

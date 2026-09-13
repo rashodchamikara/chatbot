@@ -42,7 +42,7 @@
                 </div>
 
                 <p class="mt-1 text-sm text-slate-500">
-                    {{ $conversation->website?->name ?? 'Unknown website' }}
+                    {{ ucfirst($conversation->channelConnection?->type ?: 'website') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}
                 </p>
             </div>
 
@@ -90,13 +90,13 @@
 
                         <dl class="mt-6 space-y-4 text-sm">
                             <div class="flex items-start justify-between gap-4">
-                                <dt class="text-slate-500">Visitor ID</dt>
-                                <dd class="max-w-48 break-all text-right font-medium text-slate-800">{{ $conversation->visitor_id }}</dd>
+                                <dt class="text-slate-500">Contact</dt>
+                                <dd class="max-w-48 break-all text-right font-medium text-slate-800">{{ $conversation->contact?->name ?: $conversation->contact?->phone ?: $conversation->visitor_id ?: 'Customer' }}</dd>
                             </div>
 
                             <div class="flex items-start justify-between gap-4">
-                                <dt class="text-slate-500">Website</dt>
-                                <dd class="text-right font-medium text-slate-800">{{ $conversation->website?->name ?? '—' }}</dd>
+                                <dt class="text-slate-500">Channel</dt>
+                                <dd class="text-right font-medium text-slate-800">{{ ucfirst($conversation->channelConnection?->type ?: 'website') }}<br><span class="text-xs font-normal text-slate-500">{{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: '—' }}</span></dd>
                             </div>
 
                             <div class="flex items-start justify-between gap-4">

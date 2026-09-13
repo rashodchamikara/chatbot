@@ -25,7 +25,7 @@ class ConversationController extends Controller
             Conversation::query()
                 ->with([
                     'website.tenant',
-                    'channelConnection',
+                    'channelConnection.tenant',
                     'contact',
                     'lead',
                     'assignedAgent',
@@ -91,6 +91,18 @@ class ConversationController extends Controller
             );
         }
 
+        if ($request->filled('channel_type')) {
+            $query->whereHas(
+                'channelConnection',
+                function ($channelQuery) use ($request): void {
+                    $channelQuery->where(
+                        'type',
+                        $request->string('channel_type')->toString()
+                    );
+                }
+            );
+        }
+
         $conversations =
             $query
                 ->latest('updated_at')
@@ -114,7 +126,7 @@ class ConversationController extends Controller
 
         $conversation->load([
             'website.tenant',
-            'channelConnection',
+            'channelConnection.tenant',
             'contact',
             'lead',
             'assignedAgent',

@@ -2,16 +2,18 @@
 
 namespace App\Services;
 
+use App\Models\Conversation;
 use App\Models\Lead;
 use App\Models\Website;
-use App\Models\Conversation;
 use OpenAI\Laravel\Facades\OpenAI;
+use RuntimeException;
 
 class LeadCaptureService
 {
     public function __construct(
         protected LeadScoringService $leadScoringService
-    ) {}
+    ) {
+    }
 
     public function extractLeadData(string $message): array
     {
@@ -58,19 +60,13 @@ class LeadCaptureService
     private function safeJsonDecode(string $text): array
     {
         $text = trim($text);
-
-        // Remove markdown code block if OpenAI returns ```json
         $text = preg_replace('/^```json\s*/', '', $text);
         $text = preg_replace('/^```\s*/', '', $text);
         $text = preg_replace('/\s*```$/', '', $text);
 
         $data = json_decode($text, true);
 
-        if (!is_array($data)) {
-            return [];
-        }
-
-        return $data;
+        return is_array($data) ? $data : [];
     }
 
     public function shouldCreateLead(array $data): bool
@@ -82,8 +78,12 @@ class LeadCaptureService
             || !empty($data['has_buying_intent']);
     }
 
+    /**
+     * Website is now optional. tenant_id comes from the omnichannel conversation
+     * first and falls back to Website for legacy website conversations.
+     */
     public function getOrCreateLead(
-        Website $website,
+        ?Website $website,
         Conversation $conversation,
         array $data
     ): ?Lead {
@@ -92,12 +92,21 @@ class LeadCaptureService
         }
 
         if ($conversation->lead_id) {
-            return Lead::find($conversation->lead_id);
+            return Lead::query()->find($conversation->lead_id);
         }
 
-        $lead = Lead::create([
-            'tenant_id' => $website->tenant_id,
-            'website_id' => $website->id,
+        $tenantId = $conversation->tenant_id
+            ?: $website?->tenant_id;
+
+        if (!$tenantId) {
+            throw new RuntimeException(
+                'Cannot create a lead because the conversation has no tenant.'
+            );
+        }
+
+        $lead = Lead::query()->create([
+            'tenant_id' => $tenantId,
+            'website_id' => $website?->id,
             'conversation_id' => $conversation->id,
         ]);
 
@@ -139,15 +148,17 @@ class LeadCaptureService
             $update['product_interest'] = $data['product_interest'];
         }
 
-        if (!empty($update)) {
+        if ($update !== []) {
             $lead->update($update);
         }
 
         return $this->leadScoringService->updateScore($lead->fresh());
     }
 
-    public function updateConversationStage(Conversation $conversation, ?Lead $lead): void
-    {
+    public function updateConversationStage(
+        Conversation $conversation,
+        ?Lead $lead
+    ): void {
         if (!$lead) {
             $conversation->lead_stage = 'discovery';
             $conversation->save();
@@ -173,8 +184,10 @@ class LeadCaptureService
         $conversation->save();
     }
 
-    public function getNextLeadQuestion(?Lead $lead, Conversation $conversation): ?string
-    {
+    public function getNextLeadQuestion(
+        ?Lead $lead,
+        Conversation $conversation
+    ): ?string {
         if (!$lead) {
             return null;
         }
@@ -191,10 +204,28 @@ class LeadCaptureService
         };
     }
 
+    /**
+     * Existing website API.
+     */
     public function processMessage(
         Website $website,
         Conversation $conversation,
         string $message
+    ): array {
+        return $this->processOmnichannelMessage(
+            conversation: $conversation,
+            message: $message,
+            website: $website,
+        );
+    }
+
+    /**
+     * New channel-first API. Website may be null for WhatsApp-only tenants.
+     */
+    public function processOmnichannelMessage(
+        Conversation $conversation,
+        string $message,
+        ?Website $website = null,
     ): array {
         $data = $this->extractLeadData($message);
 
@@ -204,10 +235,7 @@ class LeadCaptureService
             $data
         );
 
-        $lead = $this->updateLeadFromData(
-            $lead,
-            $data
-        );
+        $lead = $this->updateLeadFromData($lead, $data);
 
         $this->updateConversationStage(
             $conversation,
@@ -220,7 +248,10 @@ class LeadCaptureService
             'lead' => $lead,
             'extracted_data' => $data,
             'lead_stage' => $conversation->lead_stage,
-            'next_question' => $this->getNextLeadQuestion($lead, $conversation),
+            'next_question' => $this->getNextLeadQuestion(
+                $lead,
+                $conversation
+            ),
         ];
     }
 }
