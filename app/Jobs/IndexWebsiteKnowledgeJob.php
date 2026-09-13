@@ -86,6 +86,8 @@ class IndexWebsiteKnowledgeJob implements ShouldQueue
                     $embedding = $embeddingService->embed($chunkText);
 
                     KnowledgeChunk::create([
+                        'tenant_id' => $website->tenant_id,
+                        'ai_agent_id' => $website->ai_agent_id,
                         'knowledge_page_id' => $page->id,
                         'website_id' => $website->id,
                         'chunk_text' => $chunkText,

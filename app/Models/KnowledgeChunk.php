@@ -11,6 +11,8 @@ class KnowledgeChunk extends Model
     use HasFactory;
 
     protected $fillable = [
+        'tenant_id',
+        'ai_agent_id',
         'knowledge_page_id',
         'knowledge_source_id',
         'website_id',
@@ -37,6 +39,16 @@ class KnowledgeChunk extends Model
         'page_number' => 'integer',
         'chunk_index' => 'integer',
     ];
+
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
+    }
+
+    public function aiAgent(): BelongsTo
+    {
+        return $this->belongsTo(AiAgent::class);
+    }
 
     public function website(): BelongsTo
     {
@@ -68,6 +80,11 @@ class KnowledgeChunk extends Model
         return $query->where('is_active', true);
     }
 
+    public function scopeForAgent($query, int $agentId)
+    {
+        return $query->where('ai_agent_id', $agentId);
+    }
+
     public function scopeForWebsite($query, int $websiteId)
     {
         return $query->where('website_id', $websiteId);
@@ -80,7 +97,7 @@ class KnowledgeChunk extends Model
 
     public function scopeWithAnyKnowledgeSource($query)
     {
-        return $query->where(function ($query) {
+        return $query->where(function ($query): void {
             $query->whereNotNull('knowledge_page_id')
                 ->orWhereNotNull('knowledge_source_id');
         });
@@ -107,7 +124,7 @@ class KnowledgeChunk extends Model
         if ($this->knowledgePage) {
             return $this->knowledgePage->title
                 ?? $this->knowledgePage->url
-                ?? 'Website page';
+                ?? 'Knowledge page';
         }
 
         return 'Unknown source';
@@ -116,8 +133,7 @@ class KnowledgeChunk extends Model
     public function getSourceUrlAttribute(): ?string
     {
         return $this->knowledgePage?->url
-            ?? $this->page?->url
-            ?? null;
+            ?? $this->page?->url;
     }
 
     public function getSourceTypeAttribute(): string
@@ -127,7 +143,7 @@ class KnowledgeChunk extends Model
         }
 
         if ($this->knowledge_page_id !== null) {
-            return 'web_page';
+            return 'knowledge_page';
         }
 
         return 'unknown';

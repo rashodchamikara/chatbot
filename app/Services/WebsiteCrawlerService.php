@@ -122,6 +122,8 @@ class WebsiteCrawlerService
                         'url' => $url,
                     ],
                     [
+                        'tenant_id' => $website->tenant_id,
+                        'ai_agent_id' => $website->ai_agent_id,
                         'title' => $title,
                         'type' => 'page',
                         'source_type' => 'crawler',

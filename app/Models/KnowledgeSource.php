@@ -3,14 +3,18 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class KnowledgeSource extends Model
 {
     use SoftDeletes;
+
     protected $fillable = [
         'uuid',
         'tenant_id',
+        'ai_agent_id',
         'website_id',
         'uploaded_by',
         'source_type',
@@ -42,47 +46,43 @@ class KnowledgeSource extends Model
     ];
 
     protected $casts = [
-        'is_enabled'   => 'boolean',
-        'metadata'     => 'array',
-        'valid_from'   => 'datetime',
-        'valid_until'  => 'datetime',
+        'is_enabled' => 'boolean',
+        'metadata' => 'array',
+        'valid_from' => 'datetime',
+        'valid_until' => 'datetime',
         'processed_at' => 'datetime',
     ];
 
-    public function tenant()
+    public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
     }
 
-    public function website()
+    public function aiAgent(): BelongsTo
+    {
+        return $this->belongsTo(AiAgent::class);
+    }
+
+    public function website(): BelongsTo
     {
         return $this->belongsTo(Website::class);
     }
 
-    public function uploader()
+    public function uploader(): BelongsTo
     {
-        return $this->belongsTo(
-            User::class,
-            'uploaded_by'
-        );
+        return $this->belongsTo(User::class, 'uploaded_by');
     }
 
-    public function chunks()
+    public function chunks(): HasMany
     {
-        return $this->hasMany(
-            KnowledgeChunk::class,
-            'knowledge_source_id'
-        );
+        return $this->hasMany(KnowledgeChunk::class, 'knowledge_source_id');
     }
 
-    public function activeChunks()
+    public function activeChunks(): HasMany
     {
         return $this->chunks()
             ->where('is_active', true)
-            ->where(
-                'processing_version',
-                $this->active_version
-            );
+            ->where('processing_version', $this->active_version);
     }
 
     public function scopeReady($query)
@@ -91,5 +91,4 @@ class KnowledgeSource extends Model
             ->where('status', 'ready')
             ->where('is_enabled', true);
     }
-    
 }
