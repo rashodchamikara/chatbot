@@ -66,12 +66,28 @@
             ? route('admin.conversations.index')
             : null,
 
+        'channels' => Route::has('admin.channels.index')
+            ? route('admin.channels.index')
+            : null,
+
+        'knowledgeHub' => Route::has('admin.knowledge-hub.index')
+            ? route('admin.knowledge-hub.index')
+            : null,
+
+        'aiAgents' => Route::has('admin.ai-agents.index')
+            ? route('admin.ai-agents.index')
+            : null,
+
         'websites' => Route::has('admin.websites.index')
             ? route('admin.websites.index')
             : null,
 
         'websiteCreate' => Route::has('admin.websites.create')
             ? route('admin.websites.create')
+            : null,
+
+        'whatsappCreate' => Route::has('admin.channels.whatsapp.create')
+            ? route('admin.channels.whatsapp.create')
             : null,
     ];
 
@@ -292,6 +308,54 @@
                             </a>
                         @endif
 
+                        @if($mainRoutes['channels'])
+                            <a
+                                href="{{ $mainRoutes['channels'] }}"
+                                class="group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition
+                                    {{ request()->routeIs('admin.channels.*')
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                    }}"
+                            >
+                                <svg class="h-4 w-4 {{ request()->routeIs('admin.channels.*') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 7h14M7 3v4m10-4v4M5 11h6v8H5zM15 11h4v4h-4z" />
+                                </svg>
+                                Channels
+                            </a>
+                        @endif
+
+                        @if($mainRoutes['knowledgeHub'])
+                            <a
+                                href="{{ $mainRoutes['knowledgeHub'] }}"
+                                class="group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition
+                                    {{ request()->routeIs('admin.knowledge-hub.*')
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                    }}"
+                            >
+                                <svg class="h-4 w-4 {{ request()->routeIs('admin.knowledge-hub.*') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5zM20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5z" />
+                                </svg>
+                                Knowledge
+                            </a>
+                        @endif
+
+                        @if($mainRoutes['aiAgents'])
+                            <a
+                                href="{{ $mainRoutes['aiAgents'] }}"
+                                class="group hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition xl:inline-flex
+                                    {{ request()->routeIs('admin.ai-agents.*')
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                    }}"
+                            >
+                                <svg class="h-4 w-4 {{ request()->routeIs('admin.ai-agents.*') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 3h6v3H9zM5 9h14v10H5zM9 13h.01M15 13h.01M9 17h6" />
+                                </svg>
+                                AI
+                            </a>
+                        @endif
+
                         @if($mainRoutes['websites'])
                             <a
                                 href="{{ $mainRoutes['websites'] }}"
@@ -396,6 +460,18 @@
                 </div>
 
                 <div class="hidden items-center gap-3 lg:flex">
+                    @if($mainRoutes['whatsappCreate'])
+                        <a
+                            href="{{ $mainRoutes['whatsappCreate'] }}"
+                            class="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/20 transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                        >
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
+                            </svg>
+                            Add WhatsApp
+                        </a>
+                    @endif
+
                     @if($mainRoutes['websiteCreate'])
                         <a
                             href="{{ $mainRoutes['websiteCreate'] }}"
@@ -612,6 +688,36 @@
                                 </span>
                             @endif
                         @endisset
+                    </a>
+                @endif
+
+                @if($mainRoutes['channels'])
+                    <a href="{{ $mainRoutes['channels'] }}" @click="closeMobile()" class="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold {{ request()->routeIs('admin.channels.*') ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100' }}">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7h14M7 3v4m10-4v4M5 11h6v8H5zM15 11h4v4h-4z" /></svg>
+                        Channels
+                    </a>
+                @endif
+
+                @if($mainRoutes['whatsappCreate'])
+                    <a href="{{ $mainRoutes['whatsappCreate'] }}" @click="closeMobile()" class="flex items-center gap-3 rounded-xl bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
+                        </svg>
+                        Add WhatsApp
+                    </a>
+                @endif
+
+                @if($mainRoutes['knowledgeHub'])
+                    <a href="{{ $mainRoutes['knowledgeHub'] }}" @click="closeMobile()" class="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold {{ request()->routeIs('admin.knowledge-hub.*') ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100' }}">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5zM20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5z" /></svg>
+                        Knowledge
+                    </a>
+                @endif
+
+                @if($mainRoutes['aiAgents'])
+                    <a href="{{ $mainRoutes['aiAgents'] }}" @click="closeMobile()" class="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold {{ request()->routeIs('admin.ai-agents.*') ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100' }}">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3h6v3H9zM5 9h14v10H5zM9 13h.01M15 13h.01M9 17h6" /></svg>
+                        AI Agents
                     </a>
                 @endif
 
