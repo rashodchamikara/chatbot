@@ -42,6 +42,7 @@ class LeadCaptureService
                     - Do not guess.
                     - If a field is not clearly provided, return null.
                     - product_interest should be short, for example: "CRM", "SEO", "web design", "hosting", "AI chatbot".
+                    - country is optional. Capture it only if the user voluntarily provides it; it is not required for lead qualification.
                     - has_buying_intent is true if the user appears interested in buying, requesting, comparing, pricing, booking, demo, consultation, or service information.
                     '
                 ],
@@ -173,8 +174,6 @@ class LeadCaptureService
             $conversation->lead_stage = 'email_capture';
         } elseif (empty($lead->phone)) {
             $conversation->lead_stage = 'phone_capture';
-        } elseif (empty($lead->country)) {
-            $conversation->lead_stage = 'country_capture';
         } elseif (empty($lead->preferred_contact_time)) {
             $conversation->lead_stage = 'contact_time_capture';
         } else {
@@ -197,7 +196,6 @@ class LeadCaptureService
             'name_capture' => 'May I have your name so our team can assist you better?',
             'email_capture' => 'What is the best email address to send you the details?',
             'phone_capture' => 'Could you share a contact number in case our team needs to reach you?',
-            'country_capture' => 'Which country are you located in?',
             'contact_time_capture' => 'What would be a good time for our team to contact you?',
             'qualified' => 'Thank you. I have the details needed. Our team can follow up with you.',
             default => null,
