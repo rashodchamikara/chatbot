@@ -96,6 +96,7 @@ class SalesBrainService
         ?string $knowledgeContext = null,
         ?Website $website = null,
         ?string $channelType = null,
+        ?string $businessNameOverride = null,
     ): string {
         $agent->loadMissing('tenant');
 
@@ -111,10 +112,19 @@ class SalesBrainService
             $nextLeadQuestion
         );
 
+        $agentBusinessName = preg_replace(
+            '/\s+AI\s+(Agent|Assistant)$/i',
+            '',
+            trim((string) $agent->name)
+        );
+
         $businessName = trim((string) (
-            $agent->tenant?->company_name
-            ?: $agent->tenant?->name
+            $businessNameOverride
             ?: $website?->name
+            ?: $website?->domain
+            ?: $agent->tenant?->company_name
+            ?: $agentBusinessName
+            ?: $agent->tenant?->name
             ?: 'the business'
         ));
 

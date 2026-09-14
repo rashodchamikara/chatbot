@@ -187,6 +187,22 @@ class GenerateOmnichannelAiReplyJob implements ShouldQueue, ShouldBeUnique
             );
 
             $knowledgeContext = $contextBuilder->build($knowledgeResults);
+
+            Log::info('Omnichannel knowledge retrieval completed.', [
+                'tenant_id' => $conversation->tenant_id,
+                'ai_agent_id' => $agent->id,
+                'channel_connection_id' => $connection->id,
+                'conversation_id' => $conversation->id,
+                'website_id' => $website?->id,
+                'result_count' => count($knowledgeResults),
+                'sources' => collect($knowledgeResults)
+                    ->pluck('source_name')
+                    ->filter()
+                    ->unique()
+                    ->take(5)
+                    ->values()
+                    ->all(),
+            ]);
         } catch (Throwable $exception) {
             Log::warning(
                 'Omnichannel knowledge retrieval failed; AI reply will continue.',
@@ -201,6 +217,13 @@ class GenerateOmnichannelAiReplyJob implements ShouldQueue, ShouldBeUnique
         }
 
         try {
+            $businessNameOverride = trim((string) (
+                $website?->name
+                ?: $website?->domain
+                ?: data_get($connection->settings, 'verified_name')
+                ?: ''
+            ));
+
             $aiText = $brain->analyzeForAgent(
                 message: $messageText,
                 agent: $agent,
@@ -211,6 +234,9 @@ class GenerateOmnichannelAiReplyJob implements ShouldQueue, ShouldBeUnique
                 knowledgeContext: $knowledgeContext,
                 website: $website,
                 channelType: $connection->type,
+                businessNameOverride: $businessNameOverride !== ''
+                    ? $businessNameOverride
+                    : null,
             );
         } catch (Throwable $exception) {
             Log::error(
@@ -290,15 +316,38 @@ class GenerateOmnichannelAiReplyJob implements ShouldQueue, ShouldBeUnique
         ?AiAgent $connectionAgent,
         ?Website $website,
     ): AiAgent {
-        $agent = $conversation->aiAgent
-            ?: $connectionAgent
-            ?: $website?->aiAgent;
+        /*
+         * The channel connection is the authoritative routing configuration.
+         * Existing WhatsApp conversations may contain a stale ai_agent_id from
+         * before a connection was edited or re-linked. Website conversations
+         * are already synchronized on every request; external channels were not.
+         */
+        $agent = $connectionAgent
+            ?: $website?->aiAgent
+            ?: $conversation->aiAgent;
 
         if (!$agent) {
             throw new RuntimeException(
                 'Conversation is not linked to an AI agent. Configure an AI agent for this channel.'
             );
         }
+
+        if ((int) $conversation->ai_agent_id !== (int) $agent->id) {
+            $conversation->forceFill([
+                'ai_agent_id' => $agent->id,
+            ])->save();
+
+            $conversation->setRelation('aiAgent', $agent);
+        }
+
+        Log::info('Omnichannel AI routing resolved.', [
+            'conversation_id' => $conversation->id,
+            'conversation_ai_agent_id' => $conversation->ai_agent_id,
+            'connection_ai_agent_id' => $connectionAgent?->id,
+            'website_ai_agent_id' => $website?->ai_agent_id,
+            'resolved_ai_agent_id' => $agent->id,
+            'resolved_ai_agent_name' => $agent->name,
+        ]);
 
         return $agent;
     }
