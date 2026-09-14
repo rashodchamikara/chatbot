@@ -550,7 +550,11 @@ class InboundMessageService
                     ->first();
 
             if ($conversation) {
-                return $conversation;
+                return $this->synchronizeConversationRouting(
+                    conversation: $conversation,
+                    connection: $connection,
+                    data: $data,
+                );
             }
         }
 
@@ -599,7 +603,11 @@ class InboundMessageService
                 $conversation->save();
             }
 
-            return $conversation;
+            return $this->synchronizeConversationRouting(
+                conversation: $conversation,
+                connection: $connection,
+                data: $data,
+            );
         }
 
         /*
@@ -687,6 +695,69 @@ class InboundMessageService
         ];
 
         $conversation->save();
+
+        return $conversation;
+    }
+
+    /**
+     * Keep an existing external-channel conversation aligned with the current
+     * ChannelConnection. This is important after an administrator changes the
+     * AI agent or website association for a WhatsApp connection.
+     */
+    protected function synchronizeConversationRouting(
+        Conversation $conversation,
+        ChannelConnection $connection,
+        InboundMessageData $data
+    ): Conversation {
+        $changed = false;
+
+        if (
+            $connection->ai_agent_id
+            && (int) $conversation->ai_agent_id !== (int) $connection->ai_agent_id
+        ) {
+            $conversation->ai_agent_id = $connection->ai_agent_id;
+            $changed = true;
+        }
+
+        $expectedWebsiteId = $connection->website_id
+            ? (int) $connection->website_id
+            : null;
+
+        $currentWebsiteId = $conversation->website_id
+            ? (int) $conversation->website_id
+            : null;
+
+        if ($currentWebsiteId !== $expectedWebsiteId) {
+            $conversation->website_id = $expectedWebsiteId;
+            $changed = true;
+        }
+
+        if (
+            !$conversation->external_thread_id
+            && $data->externalThreadId
+        ) {
+            $conversation->external_thread_id = $data->externalThreadId;
+            $changed = true;
+        }
+
+        $metadata = is_array($conversation->metadata)
+            ? $conversation->metadata
+            : [];
+
+        if (($metadata['channel'] ?? null) !== $connection->type) {
+            $metadata['channel'] = $connection->type;
+            $changed = true;
+        }
+
+        if (($metadata['provider'] ?? null) !== $connection->provider) {
+            $metadata['provider'] = $connection->provider;
+            $changed = true;
+        }
+
+        if ($changed) {
+            $conversation->metadata = $metadata;
+            $conversation->save();
+        }
 
         return $conversation;
     }

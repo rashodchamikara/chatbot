@@ -66,11 +66,31 @@ class KnowledgeRetriever
             (int) $agent->tenant_id,
         );
 
-        $chunks = KnowledgeChunk::query()
+        /*
+         * Agent-scoped knowledge is the primary source. Include website-linked
+         * legacy chunks as a compatibility path because older website indexes
+         * may predate ai_agent_id on knowledge_chunks. Website IDs are first
+         * constrained to this tenant + agent, so this does not leak knowledge
+         * across tenants or agents.
+         */
+        $websiteIds = Website::query()
             ->where('tenant_id', $agent->tenant_id)
             ->where('ai_agent_id', $agent->id)
+            ->pluck('id');
+
+        $chunks = KnowledgeChunk::query()
             ->whereNotNull('embedding')
             ->where('is_active', true)
+            ->where(function ($query) use ($agent, $websiteIds): void {
+                $query->where(function ($query) use ($agent): void {
+                    $query->where('tenant_id', $agent->tenant_id)
+                        ->where('ai_agent_id', $agent->id);
+                });
+
+                if ($websiteIds->isNotEmpty()) {
+                    $query->orWhereIn('website_id', $websiteIds);
+                }
+            })
             ->with([
                 'knowledgePage',
                 'knowledgeSource',
