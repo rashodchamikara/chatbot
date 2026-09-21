@@ -53,6 +53,8 @@ Route::middleware([
                     '/channels/whatsapp/embedded-signup/complete',
                     [WhatsAppEmbeddedSignupController::class, 'complete']
                 )->name('channels.whatsapp.embedded.complete');
+
+                //fix merge issue
             });
 
         Route::get('/knowledge-hub', [KnowledgeHubController::class, 'index'])
