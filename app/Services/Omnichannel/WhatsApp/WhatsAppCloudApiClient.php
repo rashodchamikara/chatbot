@@ -10,6 +10,90 @@ use Throwable;
 
 class WhatsAppCloudApiClient
 {
+
+    /**
+     * Exchange the short-lived authorization code returned by
+     * Facebook Login for Business / Embedded Signup for a
+     * customer-scoped business access token.
+     *
+     * @throws WhatsAppCloudApiException
+     */
+    public function exchangeAuthorizationCode(string $code): array
+    {
+        $code = trim($code);
+
+        if ($code === '') {
+            throw new WhatsAppCloudApiException(
+                message: 'Meta authorization code is required.'
+            );
+        }
+
+        $appId = trim((string) config('services.meta.app_id'));
+        $appSecret = trim((string) config('services.meta.app_secret'));
+
+        if ($appId === '') {
+            throw new WhatsAppCloudApiException(
+                message: 'META_APP_ID is not configured.'
+            );
+        }
+
+        if ($appSecret === '') {
+            throw new WhatsAppCloudApiException(
+                message: 'META_APP_SECRET is not configured.'
+            );
+        }
+
+        $url = $this->buildUrl('oauth/access_token');
+
+        try {
+            $response = Http::acceptJson()
+                ->timeout($this->timeout())
+                ->connectTimeout(min(10, $this->timeout()))
+                ->get($url, [
+                    'client_id' => $appId,
+                    'client_secret' => $appSecret,
+                    'code' => $code,
+                ]);
+        } catch (ConnectionException $exception) {
+            throw new WhatsAppCloudApiException(
+                message: 'Unable to connect to Meta while exchanging the Embedded Signup authorization code.',
+                previous: $exception,
+            );
+        } catch (Throwable $exception) {
+            throw new WhatsAppCloudApiException(
+                message: 'Unexpected error while exchanging the Meta authorization code.',
+                previous: $exception,
+            );
+        }
+
+        if ($response->failed()) {
+            throw $this->exceptionFromResponse($response);
+        }
+
+        $payload = $response->json();
+
+        if (!is_array($payload)) {
+            throw new WhatsAppCloudApiException(
+                message: 'Meta returned an invalid authorization response.',
+                httpStatus: $response->status(),
+            );
+        }
+
+        if (isset($payload['error']) && is_array($payload['error'])) {
+            throw $this->exceptionFromResponse($response);
+        }
+
+        if (trim((string) ($payload['access_token'] ?? '')) === '') {
+            throw new WhatsAppCloudApiException(
+                message: 'Meta did not return an access token for the Embedded Signup authorization code.',
+                httpStatus: $response->status(),
+                responseData: $payload,
+            );
+        }
+
+        return $payload;
+    }
+
     /**
      * Perform a GET request against the
      * configured Meta Graph API.
@@ -162,6 +246,66 @@ public function phoneNumbersForBusinessAccount(
         );
     }
 
+
+
+    /**
+     * Register a phone number for Cloud API and set its mandatory
+     * two-step-verification PIN.
+     *
+     * @throws WhatsAppCloudApiException
+     */
+    public function registerPhone(
+        string $phoneNumberId,
+        string $accessToken,
+        string $pin,
+    ): array {
+        $phoneNumberId = trim($phoneNumberId);
+        $pin = trim($pin);
+
+        if ($phoneNumberId === '' || !ctype_digit($phoneNumberId)) {
+            throw new WhatsAppCloudApiException(
+                message: 'A valid numeric WhatsApp Phone Number ID is required.'
+            );
+        }
+
+        if (!preg_match('/^\\d{6}$/', $pin)) {
+            throw new WhatsAppCloudApiException(
+                message: 'WhatsApp two-step verification PIN must contain exactly six digits.'
+            );
+        }
+
+        return $this->post(
+            path: $phoneNumberId . '/register',
+            accessToken: $accessToken,
+            body: [
+                'messaging_product' => 'whatsapp',
+                'pin' => $pin,
+            ],
+        );
+    }
+
+    /**
+     * Subscribe this Meta app to webhook events for the customer's WABA.
+     *
+     * @throws WhatsAppCloudApiException
+     */
+    public function subscribeAppToBusinessAccount(
+        string $businessAccountId,
+        string $accessToken,
+    ): array {
+        $businessAccountId = trim($businessAccountId);
+
+        if ($businessAccountId === '' || !ctype_digit($businessAccountId)) {
+            throw new WhatsAppCloudApiException(
+                message: 'A valid numeric WhatsApp Business Account ID is required.'
+            );
+        }
+
+        return $this->post(
+            path: $businessAccountId . '/subscribed_apps',
+            accessToken: $accessToken,
+        );
+    }
 
     /**
      * Execute an HTTP request.

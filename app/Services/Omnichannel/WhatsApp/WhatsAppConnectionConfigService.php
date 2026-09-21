@@ -43,6 +43,20 @@ class WhatsAppConnectionConfigService
             $data->connectionSettings(),
         );
 
+        /*
+         * Preserve provider secrets that are not being replaced by this
+         * configuration call (for example the Embedded Signup 2FA PIN).
+         * The new access token / explicitly supplied values always win.
+         */
+        $existingCredentials = is_array($connection->credentials)
+            ? $connection->credentials
+            : [];
+
+        $credentials = array_merge(
+            $existingCredentials,
+            $data->credentials(),
+        );
+
         $connection->forceFill([
             'provider' =>
                 self::PROVIDER,
@@ -69,7 +83,7 @@ class WhatsAppConnectionConfigService
              * encrypted:array cast.
              */
             'credentials' =>
-                $data->credentials(),
+                $credentials,
 
             'settings' =>
                 $settings,

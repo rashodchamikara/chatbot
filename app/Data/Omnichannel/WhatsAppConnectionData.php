@@ -11,22 +11,24 @@ final readonly class WhatsAppConnectionData
         public ?string $displayPhoneNumber = null,
         public ?string $verifiedName = null,
         public array $settings = [],
+        public array $extraCredentials = [],
     ) {
     }
 
     /**
      * Sensitive provider credentials.
      *
-     * These will be stored in the encrypted
-     * ChannelConnection credentials attribute.
+     * ChannelConnection encrypts this entire array through its
+     * encrypted:array cast. Never copy these values into settings.
      */
     public function credentials(): array
     {
-        return [
-            'access_token' => trim(
-                $this->accessToken
-            ),
-        ];
+        return array_merge(
+            $this->extraCredentials,
+            [
+                'access_token' => trim($this->accessToken),
+            ],
+        );
     }
 
     /**

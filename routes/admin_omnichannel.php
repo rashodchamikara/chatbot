@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\KnowledgeHubController;
 use App\Http\Controllers\Admin\WhatsAppConnectionController;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\WhatsAppEmbeddedSignupController;
 
 /*
 |--------------------------------------------------------------------------
@@ -47,6 +48,13 @@ Route::middleware([
 
                 Route::delete('/{channelConnection}', [WhatsAppConnectionController::class, 'destroy'])
                     ->name('destroy');
+
+                    Route::post(
+                    '/channels/whatsapp/embedded-signup/complete',
+                    [WhatsAppEmbeddedSignupController::class, 'complete']
+                )->name('channels.whatsapp.embedded.complete');
+
+                //fix merge issue
             });
 
         Route::get('/knowledge-hub', [KnowledgeHubController::class, 'index'])

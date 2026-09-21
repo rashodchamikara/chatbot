@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\AgentPresenceController;
 use App\Http\Controllers\Admin\System\UserManagementController;
 use App\Http\Controllers\Admin\System\WebsiteManagementController;
 
+
 Route::get('/', function () {
     return view('welcome');
 });
