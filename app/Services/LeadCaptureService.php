@@ -32,7 +32,6 @@ class LeadCaptureService
                     "name": null|string,
                     "email": null|string,
                     "phone": null|string,
-                    "country": null|string,
                     "preferred_contact_time": null|string,
                     "product_interest": null|string,
                     "has_buying_intent": true|false
@@ -42,7 +41,7 @@ class LeadCaptureService
                     - Do not guess.
                     - If a field is not clearly provided, return null.
                     - product_interest should be short, for example: "CRM", "SEO", "web design", "hosting", "AI chatbot".
-                    - country is optional. Capture it only if the user voluntarily provides it; it is not required for lead qualification.
+                    - Email is optional either phone number or EMail is the minimum requirement to create a lead. 
                     - has_buying_intent is true if the user appears interested in buying, requesting, comparing, pricing, booking, demo, consultation, or service information.
                     '
                 ],
