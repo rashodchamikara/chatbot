@@ -40,6 +40,10 @@ return [
     ],
 
     'meta' => [
+    'app_id' => env('META_APP_ID'),
+
+    'app_secret' => env('META_APP_SECRET'),
+
     'graph_url' => env(
         'META_GRAPH_URL',
         'https://graph.facebook.com'
@@ -50,28 +54,11 @@ return [
         'v26.0'
     ),
 
-    'timeout' => (int) env(
-        'META_HTTP_TIMEOUT',
-        15
-    ),
-    /*
-     * Secret of OUR Meta Developer App.
-     *
-     * Used to authenticate webhook POST requests.
-     */
-    'app_secret' => env(
-        'META_APP_SECRET'
-    ),
+    'embedded_signup_config_id' =>
+        env('META_EMBEDDED_SIGNUP_CONFIG_ID'),
 
-    /*
-     * This is NOT supplied by Meta.
-     *
-     * We generate it ourselves and enter the same
-     * value in Meta's webhook configuration.
-     */
-    'webhook_verify_token' => env(
-        'META_WEBHOOK_VERIFY_TOKEN'
-    ),
+    'webhook_verify_token' =>
+        env('META_WEBHOOK_VERIFY_TOKEN'),
 ],
 
 ];
