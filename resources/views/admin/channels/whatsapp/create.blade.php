@@ -106,7 +106,7 @@
                                         <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Recommended</span>
                                     </div>
                                     <p class="mt-1 text-sm leading-6 text-slate-600">
-                                        The customer signs in to Meta, selects or creates their business and WhatsApp account, and verifies the phone number. No WABA ID, Phone Number ID or API token needs to be copied manually.
+                                        The customer signs in to Meta and connects the WhatsApp Business number they already use. WhatsApp Business App Coexistence keeps the number available in the mobile app while also connecting it to ChatNivo through Meta Cloud API.
                                     </p>
                                 </div>
                             </div>
@@ -166,7 +166,7 @@
                                     <circle class="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"/>
                                     <path class="opacity-75" fill="currentColor" d="M12 3a9 9 0 0 1 9 9h-3a6 6 0 0 0-6-6V3Z"/>
                                 </svg>
-                                <span id="meta_connect_button_text" >Connect WhatsApp with Meta</span>
+                                <span id="meta_connect_button_text">Connect Existing WhatsApp Business Number</span>
                             </button>
 
                             <div class="grid gap-3 sm:grid-cols-3">
@@ -178,7 +178,7 @@
                                 <div class="rounded-xl bg-slate-50 p-4">
                                     <div class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">2</div>
                                     <p class="mt-3 text-sm font-semibold text-slate-800">Verify number</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">Meta creates/selects the WABA and verifies phone ownership.</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">Meta connects and verifies the existing WhatsApp Business App number.</p>
                                 </div>
                                 <div class="rounded-xl bg-slate-50 p-4">
                                     <div class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">3</div>
@@ -321,8 +321,8 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M20 11.5a8.1 8.1 0 0 1-8.4 8.1 8.6 8.6 0 0 1-3.7-.9L4 20l1.3-3.6A8 8 0 1 1 20 11.5Z"/>
                             </svg>
                         </div>
-                        <h2 class="mt-4 text-base font-semibold text-slate-900">Meta Embedded Signup v4</h2>
-                        <p class="mt-2 text-sm leading-6 text-slate-600">The customer completes Meta onboarding without handling API credentials. ChatNivo stores the returned business token encrypted and reuses your existing omnichannel pipeline.</p>
+                        <h2 class="mt-4 text-base font-semibold text-slate-900">Meta Embedded Signup v4 + Coexistence</h2>
+                        <p class="mt-2 text-sm leading-6 text-slate-600">The customer connects an existing WhatsApp Business App number without giving up the mobile app. ChatNivo stores the returned business token encrypted and reuses your existing omnichannel pipeline.</p>
                     </section>
 
                     <section class="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
@@ -385,7 +385,7 @@
                 if (buttonText) {
                     buttonText.textContent = text || (busy
                         ? 'Completing Meta setup...'
-                        : 'Connect WhatsApp with Meta');
+                        : 'Connect Existing WhatsApp Business Number');
                 }
             }
 
@@ -533,16 +533,44 @@
                     return;
                 }
 
-                if (data.event === 'FINISH') {
+                if (
+                    data.event === 'FINISH'
+                    || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
+                ) {
                     signupState.wabaId = data.data?.waba_id || null;
-                    signupState.phoneNumberId = data.data?.phone_number_id || null;
-                    signupState.businessId = data.data?.business_id || data.data?.businessId || null;
+                    signupState.phoneNumberId =
+                        data.data?.phone_number_id
+                        || data.data?.phoneNumberId
+                        || null;
+                    signupState.businessId =
+                        data.data?.business_id
+                        || data.data?.businessId
+                        || null;
 
-                    if (!signupState.wabaId || !signupState.phoneNumberId) {
+                    if (!signupState.wabaId) {
                         setBusy(false);
                         showMessage(
-                            'Meta completed signup but did not return the expected WhatsApp account details. Please retry the signup flow.',
+                            'Meta completed signup but did not return the WhatsApp Business Account ID. Please retry the signup flow.',
                             'error'
+                        );
+                        return;
+                    }
+
+                    /*
+                     * Coexistence onboarding can return only the WABA ID in the
+                     * browser completion event. When Meta also returns the Phone
+                     * Number ID, the existing backend can complete immediately.
+                     *
+                     * If phone_number_id is omitted, the backend must discover
+                     * the number from the WABA after exchanging the OAuth code.
+                     * Until that backend compatibility update is installed, show
+                     * an explicit message instead of submitting an invalid request.
+                     */
+                    if (!signupState.phoneNumberId) {
+                        setBusy(false);
+                        showMessage(
+                            'Meta connected the existing WhatsApp Business account successfully, but did not return a Phone Number ID in the browser event. Coexistence onboarding can work this way. ChatNivo now needs the backend WABA phone-discovery update before final activation.',
+                            'warning'
                         );
                         return;
                     }
@@ -615,10 +643,24 @@
 
                 signupState = freshState();
                 setBusy(true, 'Waiting for Meta...');
-                showMessage('Complete the WhatsApp setup in the Meta window.', 'info');
+                showMessage('Complete the WhatsApp Business App connection in the Meta window. Keep the business number active in the WhatsApp Business mobile app.', 'info');
 
                 const extras = {
                     setup: {},
+
+                    /*
+                     * Required for WhatsApp Business App Coexistence.
+                     * This tells Meta to offer onboarding of a number that is
+                     * already being used in the WhatsApp Business mobile app.
+                     */
+                    featureType: 'whatsapp_business_app_onboarding',
+
+                    /*
+                     * Meta's Coexistence completion messages currently use the
+                     * v3 session-information payload. Keeping this explicit
+                     * improves compatibility across Embedded Signup versions.
+                     */
+                    sessionInfoVersion: '3',
                 };
 
                 /*
