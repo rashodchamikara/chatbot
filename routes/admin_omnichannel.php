@@ -49,10 +49,10 @@ Route::middleware([
                 Route::delete('/{channelConnection}', [WhatsAppConnectionController::class, 'destroy'])
                     ->name('destroy');
 
-                    Route::post(
-                    '/channels/whatsapp/embedded-signup/complete',
-                    [WhatsAppEmbeddedSignupController::class, 'complete']
-                )->name('channels.whatsapp.embedded.complete');
+                Route::post(
+                        '/embedded-signup/complete',
+                        [WhatsAppEmbeddedSignupController::class, 'complete']
+                    )->name('embedded.complete');
 
                 //fix merge issue
             });
