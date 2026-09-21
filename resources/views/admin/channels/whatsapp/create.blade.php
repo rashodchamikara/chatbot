@@ -8,7 +8,46 @@
         && $metaConfigId !== ''
         && trim((string) config('services.meta.app_secret')) !== '';
 @endphp
+<style>
+    #meta_connect_button_text {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
 
+        background-color: #1877F2 !important;
+        color: #ffffff !important;
+
+        border: 1px solid #1877F2 !important;
+        border-radius: 6px;
+
+        padding: 12px 24px;
+
+        font-size: 15px;
+        font-weight: 600;
+
+        cursor: pointer;
+        text-decoration: none !important;
+
+        transition: background-color 0.2s ease;
+    }
+
+    #meta_connect_button_text:hover {
+        background-color: #166FE5 !important;
+        color: #ffffff !important;
+        border-color: #166FE5 !important;
+    }
+
+    #meta_connect_button_text:focus,
+    #meta_connect_button_text:active {
+        background-color: #1464D2 !important;
+        color: #ffffff !important;
+    }
+
+    #meta_connect_button_text:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+</style>
 <x-app-layout>
     <x-slot name="header">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -127,7 +166,7 @@
                                     <circle class="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3"/>
                                     <path class="opacity-75" fill="currentColor" d="M12 3a9 9 0 0 1 9 9h-3a6 6 0 0 0-6-6V3Z"/>
                                 </svg>
-                                <span id="meta_connect_button_text">Connect WhatsApp with Meta</span>
+                                <span id="meta_connect_button_text" >Connect WhatsApp with Meta</span>
                             </button>
 
                             <div class="grid gap-3 sm:grid-cols-3">
