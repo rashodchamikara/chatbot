@@ -3,6 +3,8 @@
 namespace App\Services\Omnichannel\WhatsApp;
 
 use App\Data\Omnichannel\WhatsAppConnectionData;
+use App\Exceptions\Omnichannel\WhatsAppCloudApiException;
+use LogicException;
 use App\Models\AiAgent;
 use App\Models\ChannelConnection;
 use App\Models\Tenant;
@@ -149,29 +151,7 @@ class MetaEmbeddedSignupService
                 ),
             );
 
-            /*
-             * Embedded Signup verifies ownership, but Cloud API still requires
-             * registration of the number and a six-digit 2FA PIN.
-             */
-            $this->client->registerPhone(
-                phoneNumberId: $phoneNumberId,
-                accessToken: $accessToken,
-                pin: $pin,
-            );
-
-            /*
-             * Subscribe our single Meta app/webhook to this customer's WABA.
-             */
-            $this->client->subscribeAppToBusinessAccount(
-                businessAccountId: $businessAccountId,
-                accessToken: $accessToken,
-            );
-
-            /*
-             * Reuse the existing health check as the final provisioning gate.
-             * It marks the connection active and records safe provider metadata.
-             */
-            $this->healthService->check($connection);
+            $this->provision($connection, $accessToken);
         } catch (Throwable $exception) {
             report($exception);
 
@@ -183,6 +163,107 @@ class MetaEmbeddedSignupService
         }
 
         return $connection->refresh();
+    }
+
+    /** Resume a saved signup without reusing its one-time OAuth code. */
+    public function retryProvisioning(ChannelConnection $connection): ChannelConnection
+    {
+        $settings = is_array($connection->settings) ? $connection->settings : [];
+        if ($connection->type !== 'whatsapp' || $connection->provider !== 'meta'
+            || ($settings['setup_method'] ?? null) !== 'meta_embedded_signup') {
+            throw new LogicException('Select a Meta Embedded Signup WhatsApp connection.');
+        }
+
+        $accessToken = '';
+        try {
+            $this->configService->assertConfigurationReady($connection);
+            $accessToken = $this->configService->accessToken($connection);
+            $phoneId = trim((string) $connection->external_sender_id);
+            $phones = $this->client->phoneNumbersForBusinessAccount(
+                businessAccountId: trim((string) $connection->external_account_id),
+                accessToken: $accessToken,
+            );
+            if ($this->findPhoneNumber($phones, $phoneId) === null) {
+                throw new LogicException('Meta did not confirm this phone belongs to the configured WABA.');
+            }
+            $phone = $this->client->phoneNumber($phoneId, $accessToken);
+            if (trim((string) ($phone['id'] ?? '')) !== $phoneId) {
+                throw new LogicException('Meta returned a different WhatsApp Phone Number ID.');
+            }
+
+            $connection->forceFill(['status' => 'pending', 'last_error' => null])->save();
+            $this->provision($connection, $accessToken);
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->markProvisioningError($connection, $exception->getMessage(), $accessToken);
+        }
+
+        return $connection->refresh();
+    }
+
+    private function provision(ChannelConnection $connection, string $accessToken): void
+    {
+        $phoneId = trim((string) $connection->external_sender_id);
+        $settings = is_array($connection->settings) ? $connection->settings : [];
+        $credentials = is_array($connection->credentials) ? $connection->credentials : [];
+
+        // Only reuse coexistence detection for the exact phone Meta confirmed.
+        $coexistence = ($settings['whatsapp_registration_mode'] ?? null) === 'coexistence'
+            && ($settings['coexistence_phone_number_id'] ?? null) === $phoneId;
+
+        if (!$coexistence) {
+            $pin = $this->existingOrNewPin($credentials);
+            $credentials['two_step_pin'] = $pin;
+            $connection->forceFill(['credentials' => $credentials])->save();
+
+            try {
+                $result = $this->client->registerPhone($phoneId, $accessToken, $pin);
+                if (($result['success'] ?? null) !== true) {
+                    throw new LogicException('Meta did not confirm WhatsApp phone registration.');
+                }
+            } catch (WhatsAppCloudApiException $exception) {
+                // This precise Meta response identifies an SMB/Business App number.
+                // Never ignore other code-100 errors, token failures or permissions errors.
+                if (!$this->isSmbRegistrationResponse($exception)) {
+                    throw $exception;
+                }
+                $coexistence = true;
+            }
+        }
+
+        if ($coexistence) {
+            // The generated PIN was not installed on the Business App number.
+            unset($credentials['two_step_pin']);
+            $settings['whatsapp_registration_mode'] = 'coexistence';
+            $settings['coexistence_phone_number_id'] = $phoneId;
+        } else {
+            $settings['whatsapp_registration_mode'] = 'cloud_api';
+            unset($settings['coexistence_phone_number_id']);
+        }
+        $connection->forceFill(['credentials' => $credentials, 'settings' => $settings])->save();
+
+        // SMB registration is skipped, but webhook setup remains mandatory.
+        $subscription = $this->client->subscribeAppToBusinessAccount(
+            businessAccountId: trim((string) $connection->external_account_id),
+            accessToken: $accessToken,
+        );
+        if (($subscription['success'] ?? null) !== true) {
+            throw new LogicException('Meta did not confirm the WABA webhook subscription.');
+        }
+        $settings['webhook_subscribed_at'] = now()->toIso8601String();
+        $connection->forceFill(['settings' => $settings])->save();
+
+        // Existing check verifies token access and phone/WABA membership before activation.
+        // Sending and receiving a real message still needs to be tested after deployment.
+        $this->healthService->check($connection);
+    }
+
+    private function isSmbRegistrationResponse(WhatsAppCloudApiException $exception): bool
+    {
+        $message = strtolower(rtrim(trim($exception->getMessage()), '.'));
+        return $exception->httpStatus === 400
+            && $exception->metaErrorCode === '100'
+            && $message === 'register endpoint is not available for smb businesses';
     }
 
     private function assertEmbeddedSignupConfigured(): void
