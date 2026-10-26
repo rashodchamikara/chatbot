@@ -3,10 +3,10 @@
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <div class="flex items-center gap-2">
-                    <h1 class="text-xl font-semibold tracking-tight text-slate-900">Knowledge Hub</h1>
+                    <h1 class="text-xl font-semibold tracking-tight text-slate-900">Knowledge</h1>
                     <span class="inline-flex rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 ring-1 ring-inset ring-violet-200">AI Training</span>
                 </div>
-                <p class="mt-1 text-sm text-slate-500">Train your AI without needing a website. Add information manually or upload business documents.</p>
+                <p class="mt-1 text-sm text-slate-500">Add business information and documents for your AI assistants to use across channels.</p>
             </div>
 
             @if($selectedAgent)
@@ -33,7 +33,7 @@
 
             @if(!$selectedAgent)
                 <section class="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-sm">
-                    <h2 class="text-lg font-semibold text-slate-900">No AI agent is available yet</h2>
+                    <h2 class="text-lg font-semibold text-slate-900">No AI assistant is available yet</h2>
                     <p class="mx-auto mt-2 max-w-lg text-sm text-slate-500">Connect WhatsApp or add a website first. For tenant users, the system will normally create the default agent automatically.</p>
                     <a href="{{ route('admin.channels.whatsapp.create') }}" class="mt-5 inline-flex rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">Connect WhatsApp</a>
                 </section>
@@ -43,10 +43,10 @@
                         <div>
                             <p class="text-xs font-bold uppercase tracking-[0.22em] text-violet-300">Active knowledge base</p>
                             <h2 class="mt-3 text-2xl font-semibold">{{ $selectedAgent->name }}</h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-300">Everything below is available to every connected channel assigned to this AI agent — including WhatsApp-only businesses.</p>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-300">Everything below is available to every connected channel assigned to this AI assistant.</p>
                         </div>
                         <form method="GET" class="rounded-2xl border border-white/10 bg-white/5 p-4">
-                            <label class="text-xs font-bold uppercase tracking-wide text-slate-400">Switch AI agent</label>
+                            <label class="text-xs font-bold uppercase tracking-wide text-slate-400">Switch AI assistant</label>
                             <select name="agent_id" onchange="this.form.submit()" class="mt-2 w-full rounded-xl border-white/10 bg-slate-900 text-sm text-white focus:border-violet-400 focus:ring-violet-400">
                                 @foreach($agents as $agent)
                                     <option value="{{ $agent->id }}" @selected($selectedAgent->id === $agent->id)>
@@ -182,7 +182,7 @@
                                 <form method="POST" action="{{ route('admin.knowledge-hub.sources.destroy', $source) }}" onsubmit="return confirm('Delete this knowledge document?');">@csrf @method('DELETE')<button class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button></form>
                             </div>
                         @empty
-                            <div class="px-6 py-10 text-center text-sm text-slate-500">No documents uploaded for this AI agent yet.</div>
+                            <div class="px-6 py-10 text-center text-sm text-slate-500">No documents uploaded for this AI assistant yet.</div>
                         @endforelse
                     </div>
                 </section>

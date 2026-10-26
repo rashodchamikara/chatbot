@@ -19,6 +19,9 @@
 @endphp
 
 <x-app-layout>
+    @php
+    extract(require resource_path('views/workspace/context.php'), EXTR_OVERWRITE);
+@endphp
     <x-slot name="header">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -42,7 +45,7 @@
                 </div>
 
                 <p class="mt-1 text-sm text-slate-500">
-                    {{ ucfirst($conversation->channelConnection?->type ?: 'website') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}
+                    {{ $workspaceCatalog[$conversation->channelConnection?->type ?: ($conversation->website ? 'website' : 'unknown')]['label'] ?? ucfirst($conversation->channelConnection?->type ?: 'Channel') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}
                 </p>
             </div>
 
@@ -96,7 +99,7 @@
 
                             <div class="flex items-start justify-between gap-4">
                                 <dt class="text-slate-500">Channel</dt>
-                                <dd class="text-right font-medium text-slate-800">{{ ucfirst($conversation->channelConnection?->type ?: 'website') }}<br><span class="text-xs font-normal text-slate-500">{{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: '—' }}</span></dd>
+                                <dd class="text-right font-medium text-slate-800">{{ $workspaceCatalog[$conversation->channelConnection?->type ?: ($conversation->website ? 'website' : 'unknown')]['label'] ?? ucfirst($conversation->channelConnection?->type ?: 'Channel') }}<br><span class="text-xs font-normal text-slate-500">{{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: '—' }}</span></dd>
                             </div>
 
                             <div class="flex items-start justify-between gap-4">

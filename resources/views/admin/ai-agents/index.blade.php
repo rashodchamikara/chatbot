@@ -2,8 +2,8 @@
     <x-slot name="header">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h1 class="text-xl font-semibold tracking-tight text-slate-900">AI Agents</h1>
-                <p class="mt-1 text-sm text-slate-500">Configure the AI identity shared by Website, WhatsApp and future channels.</p>
+                <h1 class="text-xl font-semibold tracking-tight text-slate-900">AI assistants</h1>
+                <p class="mt-1 text-sm text-slate-500">Manage the AI identity and instructions used by your connected channels.</p>
             </div>
             @if(Route::has('admin.knowledge-hub.index'))
                 <a href="{{ route('admin.knowledge-hub.index') }}" class="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
@@ -62,8 +62,8 @@
                         </div>
                     @empty
                         <div class="px-6 py-14 text-center">
-                            <p class="font-semibold text-slate-900">No AI agents yet</p>
-                            <p class="mt-1 text-sm text-slate-500">Connecting a channel or opening the Knowledge Hub will provision the tenant's default agent.</p>
+                            <p class="font-semibold text-slate-900">No AI assistants yet</p>
+                            <p class="mt-1 text-sm text-slate-500">Connecting a channel or opening the Knowledge will provision the tenant's default agent.</p>
                         </div>
                     @endforelse
                 </div>

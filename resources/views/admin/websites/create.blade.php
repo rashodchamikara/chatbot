@@ -7,7 +7,7 @@
                     <span>/</span>
                     <span>New website</span>
                 </div>
-                <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Add website</h1>
+                <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Add website channel</h1>
                 <p class="mt-1 text-sm text-slate-500">Connect a website, configure its AI assistant, and prepare it for indexing.</p>
             </div>
 
@@ -286,7 +286,7 @@
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z"/>
                             </svg>
-                            <span x-text="submitting ? 'Creating website…' : 'Create website'"></span>
+                            <span x-text="submitting ? 'Creating website…' : 'Create website channel'"></span>
                         </button>
 
                         <a href="{{ route('admin.websites.index') }}"

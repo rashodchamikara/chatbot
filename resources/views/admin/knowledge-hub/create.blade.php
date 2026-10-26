@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <div>
-            <a href="{{ route('admin.knowledge-hub.index', ['agent_id' => $selectedAgentId]) }}" class="text-sm font-semibold text-violet-600 hover:text-violet-700">← Knowledge Hub</a>
+            <a href="{{ route('admin.knowledge-hub.index', ['agent_id' => $selectedAgentId]) }}" class="text-sm font-semibold text-violet-600 hover:text-violet-700">← Knowledge</a>
             <h1 class="mt-2 text-xl font-semibold tracking-tight text-slate-900">Add manual knowledge</h1>
             <p class="mt-1 text-sm text-slate-500">Add approved information that the AI may use when answering customers.</p>
         </div>
@@ -17,7 +17,7 @@
                 @csrf
                 <div class="space-y-6 p-5 sm:p-7">
                     <div>
-                        <label class="text-sm font-semibold text-slate-700">AI agent</label>
+                        <label class="text-sm font-semibold text-slate-700">AI assistant</label>
                         <select name="ai_agent_id" required class="mt-2 w-full rounded-xl border-slate-300 text-sm focus:border-violet-500 focus:ring-violet-500">
                             @foreach($agents as $agent)
                                 <option value="{{ $agent->id }}" @selected((string) old('ai_agent_id', $selectedAgentId) === (string) $agent->id)>

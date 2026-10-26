@@ -2,11 +2,11 @@
     <x-slot name="header">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <a href="{{ route('admin.ai-agents.index') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-700">← AI Agents</a>
+                <a href="{{ route('admin.ai-agents.index') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-700">← AI assistants</a>
                 <h1 class="mt-1 text-xl font-semibold tracking-tight text-slate-900">Configure {{ $aiAgent->name }}</h1>
-                <p class="mt-1 text-sm text-slate-500">Instructions here apply to every channel connected to this AI agent.</p>
+                <p class="mt-1 text-sm text-slate-500">Instructions here apply to every channel connected to this AI assistant.</p>
             </div>
-            <a href="{{ route('admin.knowledge-hub.index', ['agent_id' => $aiAgent->id]) }}" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Open Knowledge Hub</a>
+            <a href="{{ route('admin.knowledge-hub.index', ['agent_id' => $aiAgent->id]) }}" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Open Knowledge</a>
         </div>
     </x-slot>
 
@@ -70,7 +70,7 @@
                     <section class="rounded-3xl bg-slate-950 p-5 text-white shadow-sm">
                         <p class="text-xs font-semibold uppercase tracking-wider text-blue-300">Scope</p>
                         <p class="mt-2 text-sm font-semibold">{{ $aiAgent->tenant->company_name ?: $aiAgent->tenant->name }}</p>
-                        <p class="mt-2 text-xs leading-5 text-slate-400">Knowledge is isolated by this AI agent, not by website. This lets WhatsApp-only customers work without a website.</p>
+                        <p class="mt-2 text-xs leading-5 text-slate-400">Knowledge is isolated by this AI assistant, not by website. This lets WhatsApp-only customers work without a website.</p>
                     </section>
 
                     <button type="submit" class="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">Save agent settings</button>
