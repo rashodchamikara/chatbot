@@ -39,7 +39,7 @@
                 </div>
 
                 <p class="mt-1 text-sm text-slate-500">
-                    {{ $lead->website->name ?? 'Unknown website' }}
+                    {{ $lead->website->name ?? 'Channel not specified' }}
                 </p>
             </div>
 
@@ -118,7 +118,7 @@
                             </div>
 
                             <div>
-                                <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Website</dt>
+                                <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Website channel</dt>
                                 <dd class="mt-1.5 font-medium text-slate-900">{{ $lead->website->name ?? '—' }}</dd>
                             </div>
 

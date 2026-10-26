@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Laravel') }}</title>
+        <title>ChatNivo · {{ request()->routeIs('admin.conversations.*') ? 'Inbox' : (request()->routeIs('admin.channels.*', 'admin.websites.*') ? 'Channels' : 'Workspace') }}</title>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
@@ -13,14 +13,19 @@
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @include('workspace.styles')
+        @stack('styles')
     </head>
-    <body class="font-sans antialiased">
-        <div class="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <body class="font-sans antialiased cn-shell">
+        <a class="cn-skip" href="#workspace-main">Skip to content</a>
+        <div class="min-h-screen bg-slate-50">
             @include('layouts.navigation')
+            <div class="cn-content">
+                @include('workspace.context-bar')
 
             <!-- Page Heading -->
             @isset($header)
-                <header class="bg-white dark:bg-gray-800 shadow">
+                <header class="bg-white shadow">
                     <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
                         {{ $header }}
                     </div>
@@ -28,11 +33,12 @@
             @endisset
 
             <!-- Page Content -->
-            <main>
+            <main id="workspace-main" tabindex="-1">
                 {{ $slot }}
             </main>
+            </div>
         </div>
-        <meta name="csrf-token" content="{{ csrf_token() }}">
+        @stack('scripts')
         @auth
         <script>
         document.addEventListener('DOMContentLoaded', function () {

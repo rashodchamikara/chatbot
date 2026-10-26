@@ -164,7 +164,7 @@
                                                 </a>
 
                                                 <p class="mt-1 max-w-56 truncate text-xs text-slate-500">
-                                                    {{ $lead->website->name ?? 'Unknown website' }}
+                                                    {{ $lead->website->name ?? 'Channel not specified' }}
                                                 </p>
                                             </div>
                                         </div>
@@ -273,7 +273,7 @@
 
                                 <div class="min-w-0 flex-1">
                                     <p class="truncate font-semibold text-slate-900">{{ $leadName }}</p>
-                                    <p class="mt-1 truncate text-sm text-slate-500">{{ $lead->website->name ?? 'Unknown website' }}</p>
+                                    <p class="mt-1 truncate text-sm text-slate-500">{{ $lead->website->name ?? 'Channel not specified' }}</p>
                                 </div>
 
                                 <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses }}">

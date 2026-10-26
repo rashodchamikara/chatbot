@@ -3,11 +3,11 @@
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h1 class="text-2xl font-semibold tracking-tight text-slate-900">
-                    Websites
+                    Website chat
                 </h1>
 
                 <p class="mt-1 text-sm text-slate-500">
-                    Manage connected websites, indexing health, and assistant configuration.
+                    Manage your website chat channels, widget settings, and website knowledge.
                 </p>
             </div>
 
@@ -30,7 +30,7 @@
                     />
                 </svg>
 
-                Add website
+                Add website channel
             </a>
         </div>
     </x-slot>
@@ -312,7 +312,7 @@
                                                 href="{{ route('admin.websites.create') }}"
                                                 class="mt-4 inline-flex rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
                                             >
-                                                Add website
+                                                Add website channel
                                             </a>
                                         </td>
                                     </tr>

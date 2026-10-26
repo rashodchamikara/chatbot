@@ -1,13 +1,16 @@
 <x-app-layout>
+    @php
+    extract(require resource_path('views/workspace/context.php'), EXTR_OVERWRITE);
+@endphp
     <x-slot name="header">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h1 class="text-2xl font-semibold tracking-tight text-slate-900">
-                    Conversations
+                    Inbox
                 </h1>
 
                 <p class="mt-1 text-sm text-slate-500">
-                    Monitor AI and human conversations across WhatsApp, websites, and future channels.
+                    Reply to customers and manage AI handovers across your connected channels.
                 </p>
             </div>
 
@@ -34,6 +37,11 @@
                 </div>
             @endif
 
+            <nav class="cn-subnav" aria-label="Inbox queues" style="margin-bottom:20px;border-radius:12px">
+                @foreach(['' => 'All conversations', 'live_waiting' => 'Waiting for agent', 'live' => 'Live agent', 'ai' => 'AI conversations'] as $queue => $queueLabel)
+                    <a href="{{ route('admin.conversations.index', array_merge(request()->except(['page', 'mode']), $queue === '' ? [] : ['mode' => $queue])) }}" @if((string) request('mode', '') === $queue) aria-current="page" @endif>{{ $queueLabel }}</a>
+                @endforeach
+            </nav>
             <section class="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <form
                     method="GET"
@@ -80,8 +88,11 @@
 
                         <select id="channel_type" name="channel_type" class="h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
                             <option value="">All channels</option>
-                            <option value="whatsapp" @selected(request('channel_type') === 'whatsapp')>WhatsApp</option>
-                            <option value="website" @selected(request('channel_type') === 'website')>Website</option>
+                            @foreach($workspaceCatalog as $catalogType => $catalogItem)
+                                @if($catalogItem['route'] && Route::has($catalogItem['route']))
+                                    <option value="{{ $catalogType }}" @selected(request('channel_type') === $catalogType)>{{ $catalogItem['label'] }}</option>
+                                @endif
+                            @endforeach
                         </select>
                     </div>
 
@@ -186,7 +197,7 @@
                                     </td>
 
                                     <td class="px-5 py-4 align-middle text-sm text-slate-700">
-                                        {{ ucfirst($conversation->channelConnection?->type ?: 'website') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}
+                                        {{ $workspaceCatalog[$conversation->channelConnection?->type ?: ($conversation->website ? 'website' : 'unknown')]['label'] ?? ucfirst($conversation->channelConnection?->type ?: 'Channel') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}
                                     </td>
 
                                     <td class="px-5 py-4 align-middle">
@@ -276,7 +287,7 @@
 
                                 <div class="min-w-0 flex-1">
                                     <p class="truncate font-semibold text-slate-900">{{ $conversation->contact?->name ?: $conversation->contact?->phone ?: $conversation->visitor_id ?: 'Customer' }}</p>
-                                    <p class="mt-1 truncate text-sm text-slate-500">{{ ucfirst($conversation->channelConnection?->type ?: 'website') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}</p>
+                                    <p class="mt-1 truncate text-sm text-slate-500">{{ $workspaceCatalog[$conversation->channelConnection?->type ?: ($conversation->website ? 'website' : 'unknown')]['label'] ?? ucfirst($conversation->channelConnection?->type ?: 'Channel') }} · {{ $conversation->channelConnection?->name ?: $conversation->website?->name ?: 'Channel' }}</p>
                                 </div>
 
                                 <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ $modeClasses }}">
@@ -317,7 +328,7 @@
             </section>
 
             <div class="mt-6">
-                {{ $conversations->links() }}
+                {{ $conversations->withQueryString()->links() }}
             </div>
         </div>
     </div>
