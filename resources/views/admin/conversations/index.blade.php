@@ -1,3 +1,21 @@
+{{-- A compact representation of the SAME controller-scoped, paginated inbox.
+     No new database query or authorization bypass is introduced here. --}}
+@if(request()->boolean('_waiting_alert_feed'))
+    @php
+        $waitingAlertPayload = [
+            'version' => 1,
+            'items' => $conversations->getCollection()
+                ->filter(fn ($item) => $item->mode === 'live_waiting' && $item->status === 'active')
+                ->map(fn ($item) => [
+                    'id' => (string) $item->id,
+                    'name' => $item->contact?->name ?: 'Customer',
+                    'url' => route('admin.conversations.show', $item),
+                ])->values()->all(),
+            'nextPage' => $conversations->hasMorePages() ? $conversations->currentPage() + 1 : null,
+        ];
+    @endphp
+    <script id="cn-waiting-feed" type="application/json">@json($waitingAlertPayload)</script>
+@else
 <x-app-layout>
     @php
     extract(require resource_path('views/workspace/context.php'), EXTR_OVERWRITE);
@@ -333,3 +351,5 @@
         </div>
     </div>
 </x-app-layout>
+
+@endif
