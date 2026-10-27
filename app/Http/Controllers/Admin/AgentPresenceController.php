@@ -2,86 +2,48 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Events\AgentStatusChanged;
 use App\Http\Controllers\Controller;
-use App\Models\Website;
 use App\Services\AgentAvailabilityService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class AgentPresenceController extends Controller
 {
     public function online(Request $request, AgentAvailabilityService $availability)
     {
         $user = $request->user();
+        abort_unless($user, 401);
 
-        Log::warning('AGENT ONLINE endpoint called', [
-            'user_id' => $user->id,
-            'email' => $user->email,
-            'route' => $request->route()?->getName(),
-            'url' => $request->fullUrl(),
-            'referer' => $request->header('referer'),
-            'user_agent' => $request->userAgent(),
-            'ip' => $request->ip(),
-            'time' => now()->toDateTimeString(),
-        ]);
+        // The shared layout calls this endpoint for every signed-in role.
+        // A super admin receives a successful no-op rather than becoming an agent.
+        $eligible = $availability->canProvideLiveChat($user);
         $user->forceFill([
-            'agent_status' => 'online',
+            'agent_status' => $eligible ? 'online' : 'offline',
             'last_seen_at' => now(),
         ])->save();
 
-        $this->broadcastAvailabilityForUser($user, $availability);
-
-        $freshUser = $user->fresh();
+        $availability->broadcastAvailabilityForUser($user);
 
         return response()->json([
-            'status' => $freshUser->agent_status,
-            'last_seen_at' => $freshUser->last_seen_at
-                ? \Illuminate\Support\Carbon::parse($freshUser->last_seen_at)->toDateTimeString()
-                : null,
+            'status' => $eligible ? 'online' : 'offline',
+            'last_seen_at' => $user->last_seen_at?->toDateTimeString(),
+            'live_agent_eligible' => $eligible,
         ]);
     }
 
     public function offline(Request $request, AgentAvailabilityService $availability)
     {
         $user = $request->user();
+        abort_unless($user, 401);
 
-        Log::error('AGENT OFFLINE endpoint called', [
-            'user_id' => $user->id,
-            'email' => $user->email,
-            'route' => $request->route()?->getName(),
-            'url' => $request->fullUrl(),
-            'referer' => $request->header('referer'),
-            'user_agent' => $request->userAgent(),
-            'ip' => $request->ip(),
-            'time' => now()->toDateTimeString(),
-        ]);
         $user->forceFill([
             'agent_status' => 'offline',
             'last_seen_at' => now(),
         ])->save();
 
-        $this->broadcastAvailabilityForUser($user, $availability);
+        $availability->broadcastAvailabilityForUser($user);
 
         return response()->json([
             'status' => 'offline',
         ]);
-    }
-
-    private function broadcastAvailabilityForUser($user, AgentAvailabilityService $availability): void
-    {
-        $websites = Website::query()
-            ->when(!$user->isSuperAdmin(), function ($query) use ($user) {
-                $query->where('tenant_id', $user->tenant_id);
-            })
-            ->where('is_active', true)
-            ->get();
-
-        foreach ($websites as $website) {
-            broadcast(new AgentStatusChanged(
-                $website,
-                $availability->hasOnlineAgent($website)
-            ));
-        }
     }
 }
