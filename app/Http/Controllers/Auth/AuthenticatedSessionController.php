@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use App\Services\AgentAvailabilityService;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -43,13 +44,30 @@ class AuthenticatedSessionController extends Controller
     /**
      * Destroy an authenticated session.
      */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request, AgentAvailabilityService $availability): RedirectResponse
     {
+        $user = $request->user();
+        if ($user) {
+            $user->forceFill([
+                'agent_status' => 'offline',
+                'last_seen_at' => now(),
+            ])->save();
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
 
         $request->session()->regenerateToken();
+
+        // Logout must succeed even when the realtime broadcaster is unavailable.
+        if ($user) {
+            try {
+                $availability->broadcastAvailabilityForUser($user);
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        }
 
         return redirect('/');
     }
