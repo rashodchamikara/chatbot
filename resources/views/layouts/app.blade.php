@@ -38,6 +38,9 @@
             </main>
             </div>
         </div>
+        @auth
+            @include('workspace.waiting-alerts')
+        @endauth
         @stack('scripts')
         @auth
         <script>
