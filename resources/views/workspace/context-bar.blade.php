@@ -7,6 +7,7 @@
         <a href="{{ route('admin.channels.index') }}" @if(request()->routeIs('admin.channels.index')) aria-current="page" @endif>All channels</a>
         <a href="{{ route('admin.websites.index') }}" @if(request()->routeIs('admin.websites.*', 'admin.knowledge.*')) aria-current="page" @endif>Website chat</a>
         <a href="{{ route('admin.channels.index', ['type' => 'whatsapp']) }}" @if(request()->routeIs('admin.channels.whatsapp.*')) aria-current="page" @endif>WhatsApp</a>
+        <a href="{{ route('admin.channels.index', ['type' => 'facebook']) }}" @if(request()->routeIs('admin.channels.facebook.*')) aria-current="page" @endif>Messenger</a>
         <a href="{{ route('admin.channels.index') }}#channel-catalog">Add a channel</a>
     </nav>
 @elseif($workspaceManager && request()->routeIs('admin.ai-agents.*', 'admin.knowledge-hub.*'))

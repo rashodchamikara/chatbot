@@ -200,3 +200,4 @@ Route::middleware('auth')
 require __DIR__ . '/auth.php';
 
 require __DIR__ . '/admin_omnichannel.php';
+require __DIR__.'/messenger.php';

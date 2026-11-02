@@ -372,6 +372,10 @@ class ConversationController extends Controller
                     ],
                 );
 
+        if ($conversation->channelConnection?->type === 'facebook' && $message->status === 'failed') {
+            return response()->json(['message' => $message->error_message ?: 'Messenger could not send this reply.'], 422);
+        }
+
         return response()->json([
             'success' => true,
 

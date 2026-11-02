@@ -12,7 +12,7 @@
                     </span>
                 </div>
                 <p class="mt-1 text-sm text-slate-500">
-                    Website chat, WhatsApp, and future messaging channels in one workspace.
+                    Website chat, WhatsApp, Facebook Messenger, and future channels in one workspace.
                 </p>
             </div>
 
@@ -131,6 +131,8 @@
                                        class="rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                                         Manage
                                     </a>
+                                @elseif($workspaceManager && $channel->type === 'facebook')
+                                    <a class="cn-button" href="{{ route('admin.channels.facebook.edit', $channel) }}">Manage</a>
                                 @elseif($workspaceManager && $channel->type === 'website' && $channel->website && Route::has('admin.websites.show'))
                                     <a href="{{ route('admin.websites.show', $channel->website) }}"
                                        class="rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
