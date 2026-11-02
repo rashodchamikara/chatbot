@@ -270,6 +270,10 @@ class GenerateOmnichannelAiReplyJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        if ($connection->type === 'facebook' && mb_strlen($aiText) > 2000) {
+            $aiText = mb_substr($aiText, 0, 1999).'…';
+        }
+
         $outboundMessageService->send(
             conversation: $conversation,
             body: $aiText,

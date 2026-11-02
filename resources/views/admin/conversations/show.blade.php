@@ -261,7 +261,15 @@
                                                     : 'rounded-br-md bg-blue-600 text-white')
                                             }}"
                                         >
-                                            <div class="whitespace-pre-wrap break-words">{{ $message->message }}</div>
+                                            <div class="whitespace-pre-wrap break-words">{{ $message->message ?: ($message->message_type !== 'text' ? 'Customer sent an attachment.' : '') }}</div>
+                                            @if($conversation->channelConnection?->type === 'facebook')
+                                                @foreach($message->attachments as $attachment)
+                                                    @if(str_starts_with($attachment->external_url ?? '', 'https://'))
+                                                        <a class="block underline" href="{{ $attachment->external_url }}" target="_blank" rel="noopener noreferrer">Open {{ $attachment->type }} attachment</a>
+                                                    @endif
+                                                @endforeach
+                                                @if($message->status === 'failed')<p role="alert" class="text-sm">Not sent: {{ $message->error_message }}</p>@endif
+                                            @endif
                                         </div>
                                     </div>
                                 @endif
@@ -316,7 +324,7 @@
                                 <textarea
                                     id="agent-message-input"
                                     rows="3"
-                                    maxlength="5000"
+                                    maxlength="{{ $conversation->channelConnection?->type === 'facebook' ? 2000 : 5000 }}"
                                     placeholder="Type your reply…"
                                     class="block w-full resize-none rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                     required
@@ -324,6 +332,9 @@
 
                                 <p class="mt-2 text-xs text-slate-400">
                                     Press Enter to send. Use Shift + Enter for a new line.
+                                    @if($conversation->channelConnection?->type === 'facebook')
+                                        Messenger: up to 2,000 characters, within 24 hours of the customer’s last message. Reload to view attachment links and send status.
+                                    @endif
                                 </p>
                             </div>
 
@@ -790,6 +801,7 @@
                      * delivery from the legacy public channel/AJAX response.
                      */
                     if (event.change_type !== 'created') {
+                        if (event.message.status === 'failed') showError('A reply could not be sent. Reload to see its status.');
                         return;
                     }
 

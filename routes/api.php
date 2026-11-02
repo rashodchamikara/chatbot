@@ -33,3 +33,6 @@ Route::post(
 )->name(
     'webhooks.meta.whatsapp.receive'
 );
+
+Route::get('/webhooks/meta/messenger', [\App\Http\Controllers\Webhooks\MessengerWebhookController::class, 'verify'])->name('webhooks.meta.messenger.verify');
+Route::post('/webhooks/meta/messenger', [\App\Http\Controllers\Webhooks\MessengerWebhookController::class, 'receive'])->name('webhooks.meta.messenger.receive');

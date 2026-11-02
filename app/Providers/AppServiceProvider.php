@@ -100,6 +100,8 @@ class AppServiceProvider extends ServiceProvider
                     )
                 );
 
+                $manager->register($app->make(\App\Services\Omnichannel\Adapters\MessengerAdapter::class));
+
                 return $manager;
             }
         );
