@@ -134,6 +134,12 @@ class MessengerChannelController extends Controller
                 $channel->fill(['tenant_id' => $grant->tenant_id, 'ai_agent_id' => $grant->ai_agent_id, 'website_id' => null,
                     'type' => 'facebook', 'provider' => 'meta', 'name' => $page['name'], 'status' => 'pending',
                     'external_account_id' => $page['id'], 'external_sender_id' => $page['id']]);
+                /// Generate a unique webhook key for new connections.
+                    // Preserve the existing key when reconnecting a Page.
+                    if (empty($channel->webhook_key)) {
+                        $channel->webhook_key = (string) Str::ulid();
+                    }
+
                 $stage = 'save_channel';
                 $channel->save();
                 $stage = 'claim_page';
