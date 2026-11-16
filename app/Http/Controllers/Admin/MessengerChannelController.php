@@ -5,6 +5,8 @@ use App\Models\{AiAgent, ChannelConnection, MessengerOAuthGrant, Tenant};
 use App\Services\Omnichannel\Messenger\GraphClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -103,14 +105,19 @@ class MessengerChannelController extends Controller
         $grant = $this->grant($request, $grant);
         // Explicit projection: access tokens never enter HTML or JavaScript.
         $pages = collect($grant->pages)->map(fn ($p) => ['id' => $p['id'], 'name' => $p['name']])->values();
-        return response()->view('admin.channels.facebook.pages', compact('grant', 'pages'))->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer');
+        return response()->view('admin.channels.facebook.pages', compact('grant', 'pages'))->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'same-origin');
     }
     public function connect(Request $request, string $grant, GraphClient $graph)
     {
         $grant = $this->grant($request, $grant);
-        $data = $request->validate(['page_id' => ['required', 'regex:/^[0-9]+$/']]);
+        $validator = Validator::make($request->only('page_id'), ['page_id' => ['required', 'string', 'regex:/^[0-9]+$/']]);
+        if ($validator->fails()) {
+            return redirect()->route('admin.channels.facebook.pages', $grant->id)->withErrors($validator);
+        }
+        $data = $validator->validated();
+        $stage = 'local_validation';
         try {
-            $channel = DB::transaction(function () use ($grant, $data, $graph) {
+            $channel = DB::transaction(function () use ($grant, $data, $graph, &$stage) {
                 $grant = MessengerOAuthGrant::whereKey($grant->id)->lockForUpdate()->firstOrFail();
                 abort_unless($grant->status === 'ready' && $grant->expires_at->isFuture(), 409);
                 $page = $grant->pages[$data['page_id']] ?? null;
@@ -127,10 +134,14 @@ class MessengerChannelController extends Controller
                 $channel->fill(['tenant_id' => $grant->tenant_id, 'ai_agent_id' => $grant->ai_agent_id, 'website_id' => null,
                     'type' => 'facebook', 'provider' => 'meta', 'name' => $page['name'], 'status' => 'pending',
                     'external_account_id' => $page['id'], 'external_sender_id' => $page['id']]);
+                $stage = 'save_channel';
                 $channel->save();
+                $stage = 'claim_page';
                 if (!$claim) DB::table('messenger_page_claims')->insert(['page_id' => $page['id'], 'tenant_id' => $grant->tenant_id, 'channel_connection_id' => $channel->id]);
                 // Subscription has no customer-visible messages; DB rollback keeps failed connections inactive.
+                $stage = 'subscribe_page';
                 $graph->subscribe((string) $page['id'], $page['access_token']);
+                $stage = 'activate_channel';
                 $channel->fill(['credentials' => ['page_access_token' => $page['access_token']],
                     'settings' => array_merge($channel->settings ?? [], ['verified_name' => $page['name']]),
                     'status' => 'active', 'connected_at' => now(), 'last_health_check_at' => now(), 'last_error' => null])->save();
@@ -138,10 +149,26 @@ class MessengerChannelController extends Controller
                 return $channel;
             });
             return redirect()->route('admin.channels.facebook.edit', $channel)->with('success', 'Facebook Page connected. Its messages now use your selected AI assistant.');
+        } catch (ValidationException $e) {
+            return redirect()->route('admin.channels.facebook.pages', $grant->id)->withErrors($e->errors());
         } catch (\Illuminate\Database\QueryException $e) {
-            return back()->withErrors(['facebook' => 'Page ownership changed or the connection could not be saved. Refresh and try again.']);
+            $reference = (string) Str::uuid();
+            Log::warning('Messenger Page connection database failure', [
+                'reference' => $reference, 'tenant_id' => $grant->tenant_id, 'stage' => $stage,
+                'sqlstate' => $e->errorInfo[0] ?? null, 'driver_code' => $e->errorInfo[1] ?? null,
+            ]); // Do not log SQL, bindings, tokens, or raw exception text.
+            return redirect()->route('admin.channels.facebook.pages', $grant->id)->withErrors([
+                'facebook' => 'The Page connection could not be saved at step '.$stage.'. Check the server log using reference '.$reference.'.',
+            ]);
         } catch (RuntimeException $e) {
-            return back()->withErrors(['facebook' => get_class($e) === RuntimeException::class ? $e->getMessage() : 'The connection could not be saved. Please try again.']);
+            $reference = (string) Str::uuid();
+            Log::warning('Messenger Page connection failed', [
+                'reference' => $reference, 'tenant_id' => $grant->tenant_id, 'stage' => $stage,
+                'exception_type' => get_class($e), 'error_code' => $e->getCode(),
+            ]);
+            $message = get_class($e) === RuntimeException::class ? $e->getMessage() : 'The connection could not be saved. Please try again.';
+            return redirect()->route('admin.channels.facebook.pages', $grant->id)
+                ->withErrors(['facebook' => $message.' Reference: '.$reference]);
         }
     }
     public function edit(Request $request, ChannelConnection $channel)
