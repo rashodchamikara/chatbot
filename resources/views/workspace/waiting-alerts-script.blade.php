@@ -131,7 +131,7 @@
             try {
                 response = await fetch(url.href, {
                     credentials: 'same-origin', cache: 'no-store', signal: aborter.signal,
-                    headers: {'Accept': 'text/html'}
+                    headers: {'Accept': 'text/html', 'X-Requested-With': 'XMLHttpRequest'}
                 });
                 if ([401, 403, 419].includes(response.status) || response.redirected) {
                     stopped = true; $('cn-alert-toast').hidden = true; $('cn-alert-count').textContent = '—';
